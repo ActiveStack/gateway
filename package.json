@@ -1,8 +1,8 @@
 {
   "name": "activestack-gateway",
-  "version": "1.0.0",
-  "release_date": "2015-08-08",
-  "description": "Socket server for the ActiveStack",
+  "version": "0.1.0",
+  "release_date": "2015-08-10",
+  "description": "Socket server for ActiveStack",
   "main": "src/main.js",
   "dependencies": {
     "amqp": "^0.1.8",
@@ -26,7 +26,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/percero/node-gateway.git"
+    "url": "git+https://github.com/activestack/gateway.git"
   },
   "keywords": [
     "Node",
@@ -36,9 +36,9 @@
   "author": "Jonathan Samples",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/percero/node-gateway/issues"
+    "url": "https://github.com/activestacl/gateway/issues"
   },
-  "homepage": "https://github.com/percero/node-gateway#readme",
+  "homepage": "https://github.com/activestack/gateway#readme",
   "bin": {
     "activestack-gateway": "bin/activestack-gateway.js"
   },
