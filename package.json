@@ -1,6 +1,6 @@
 {
   "name": "activestack-gateway",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "release_date": "2015-08-10",
   "description": "Socket server for ActiveStack",
   "main": "src/main.js",
@@ -36,7 +36,7 @@
   "author": "Jonathan Samples",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/activestacl/gateway/issues"
+    "url": "https://github.com/activestack/gateway/issues"
   },
   "homepage": "https://github.com/activestack/gateway#readme",
   "bin": {
