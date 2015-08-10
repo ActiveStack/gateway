@@ -1,0 +1,684 @@
+#!/bin/bash
+# 
+# Control Script for the PF Server
+#
+# Setup some colors
+# Text color variables
+strong=$(tput bold)             # Bold
+error=$(tput setaf 1)           #  red
+good=$(tput setaf 2)            #  green
+warn=$(tput setaf 3)            #  yellow
+info=$(tput setaf 7)            #  gray
+heading=${strong}$(tput setaf 6)         #  white
+reset=$(tput sgr0)              # Reset
+function fatal {
+    echo "${error}$1"
+    echo "Failed${reset}"
+    echo 
+    exit 1
+}
+function ok {
+    echo "${good}OK"
+}
+
+workingdir="/opt/node-gateway"
+numperceros=2
+numchangewatchers=2
+
+newrelicjar="$workingdir/bin/newrelic.jar"
+propertiesdir="/etc/pfserver"
+perceropidfile="$workingdir/pid/percero.pid"
+cwpidfile="$workingdir/pid/cw.pid"
+gatepidfile="$workingdir/pid/gate.pid"
+logdir="/var/log"
+rabbitmqlogdir="$logdir/rabbitmq"
+redislogfile="$logdir/redis.log"
+percerolog="$logdir/pfserver/percero.log"
+cwlog="$logdir/pfserver/changeWatcher.log"
+gatelog="$logdir/pfserver/gate.log"
+percerojar="$workingdir/bin/AgentListener-onejar.jar"
+cwjar="$workingdir/bin/ChangeWatcherListener-onejar.jar"
+gatewayjs="$workingdir/src/cluster.js"
+gatewayconfigfile="$propertiesdir/gateway.properties"
+oauthfile="$propertiesdir/oauth.properties"
+configfile="$propertiesdir/env.properties"
+projectconfigfile="$propertiesdir/project.properties"
+log4jfile="$propertiesdir/log4j.props"
+javaconfigfile="file:$configfile"
+log4jconfigfile="file:$log4jfile"
+
+function start_gateway {
+    if [ -e "$gatepidfile" ]
+    then
+	echo "$(date +"%Y-%m-%d %H:%M:%S"): Gateway already running"
+	exit 0
+    else
+	echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Starting Gateway..."
+	nohup node $gatewayjs $gatewayconfigfile >> $gatelog 2>> $gatelog &
+	PID=$!
+	if [ $? -eq 1 ]
+	then
+	    fatal "Gateway failed to start"
+	fi
+	echo $PID > $gatepidfile
+	echo "....${good}OK"
+    fi
+}
+
+function start_redis {
+	echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Starting redis-server...."
+        service redis-server start > /dev/null 2> /dev/null
+        service redis-server status > /dev/null 2> /dev/null
+        if [ $? -eq 1 ]
+        then
+		fatal "redis-server failed to start"
+        else
+		ok
+        fi 
+}
+
+function start_rabbitmq {
+        echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Starting RabbitMQ...."
+        service rabbitmq-server start > /dev/null 2> /dev/null
+        service rabbitmq-server status > /dev/null 2> /dev/null
+        if [ $? -eq 1 ]
+        then
+            fatal "RabbitMQ failed to start"
+        else
+            ok
+        fi
+}
+
+function start_perceroagents {
+	myIp=`curl --silent -output /dev/null ifconfig.me`
+	#curl -silent ifconfig.me` 
+
+        counter=0
+        while [[ "$numperceros" > "$counter" ]]
+        do
+				start_perceroagent $counter
+
+                let counter+=1
+       done
+}
+
+function start_perceroagent() {
+	counter=${1}
+	echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Starting PerceroAgent ${counter}..."
+
+	freemem=`free -m | grep Mem | awk '{print $2}'`
+	eachMem=`echo "$freemem * 0.125 / $numperceros" | bc`
+	eachMem=`echo ${eachMem%.*}`
+	eachMemMax=`echo "$freemem * 0.35 / $numperceros" | bc`
+	eachMemMax=`echo ${eachMemMax%.*}`
+	jarMem="-Xms${eachMem}M -Xmx${eachMemMax}M"
+
+	jmxPort=`echo "9000 + ($counter * 10)" | bc`
+
+	# If new relic jar exists, load up with new relic
+	if [ -f "$newrelicjar" ]
+		then
+			nohup java -classpath .:${propertiesdir}:${percerojar} -javaagent:${newrelicjar} ${jarMem} com.simontuffs.onejar.Boot  >> $percerolog${counter} 2>> $percerolog${counter} &
+		else
+ 			nohup java -classpath .:${propertiesdir}:${percerojar} ${jarMem} com.simontuffs.onejar.Boot  >> $percerolog${counter} 2>> $percerolog${counter} &
+	fi
+                
+	if [ $? -eq 1 ]
+		then
+			fatal "PerceroAgent failed to start"
+	fi
+
+	PID=$!
+	echo $PID > $perceropidfile${counter}
+	echo "............${good}OK"
+}
+
+function start_changewatchers {
+		myIp=`curl --silent -output /dev/null ifconfig.me`
+
+        counter=0
+        while [[ "$numchangewatchers" > "$counter" ]]
+        do
+				start_changewatcher $counter
+                let counter+=1
+       done
+}
+
+function start_changewatcher {
+	counter=${1}
+	echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Starting ChangeWatcher ${counter}..."
+
+	freemem=`free -m | grep Mem | awk '{print $2}'`
+	eachMem=`echo "$freemem * 0.125 / $numchangewatchers" | bc`
+	eachMem=`echo ${eachMem%.*}`
+	eachMemMax=`echo "$freemem * 0.35 / $numchangewatchers" | bc`
+	eachMemMax=`echo ${eachMemMax%.*}`
+	jarMem="-Xms${eachMem}M -Xmx${eachMemMax}M"
+
+	jmxPort=`echo "9000 + ($counter * 10)" | bc`
+	# -Dlog4j.configuration=$log4jconfigfile
+
+	# If new relic jar exists, load up with new relic
+	if [ -f "$newrelicjar" ]
+		then
+			nohup java -classpath .:${propertiesdir}:${cwjar} -javaagent:${newrelicjar} ${jarMem} com.simontuffs.onejar.Boot  >> $cwlog${counter} 2>> $cwlog${counter} &
+		else
+			nohup java -classpath .:${propertiesdir}:${cwjar} ${jarMem} com.simontuffs.onejar.Boot  >> $cwlog${counter} 2>> $cwlog${counter} &
+	fi
+                
+	if [ $? -eq 1 ]
+		then
+			fatal "ChangeWatcher failed to start"
+	fi
+
+	PID=$!
+	echo $PID > $cwpidfile${counter}
+	echo "............${good}OK"
+}
+
+function start {
+	if [ -n "$1" ]
+	    then
+		case "$1" in
+		  "redis") start_redis
+		    ;;
+		  "rabbitmq") start_rabbitmq 
+		    ;;
+		  "gateway") start_gateway 
+		    ;;
+		  "perceroagent") start_perceroagents
+		    ;;
+		  "changewatcher") start_changewatchers
+		    ;;
+		  *) usage
+                ;;
+		esac
+	   else 
+		echo "${info}$(date +"%Y-%m-%d %H:%M:%S"): Starting PF Server stack"
+
+		start_redis
+		start_rabbitmq
+		start_gateway
+		start_perceroagents
+		start_changewatchers
+	fi
+}
+
+function stop_gateway {
+    echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Stopping Gateway..."
+    if [ -e $gatepidfile ]
+    then
+        pid=`cat $gatepidfile`
+        if (ps $pid > /dev/null >& /dev/null)
+        then
+            kill $pid > /dev/null >& /dev/null
+        else
+            echo -n "${warn}Not Running${info}..."
+        fi
+        rm $gatepidfile > /dev/null >& /dev/null
+    else
+        echo -n "${warn}Not Running${info}..."
+    fi
+    echo "....${good}OK"
+}
+
+function stop_perceroagent {
+    pperceroids=`ps -ef | grep AgentListener | grep java | awk '{print $2}'`
+
+    for pid in $pperceroids
+    do 
+        echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Stopping PerceroAgent..."
+        if (ps $pid > /dev/null >& /dev/null)
+                then
+                    kill $pid > /dev/null >& /dev/null
+                else
+                    echo -n "${warn}Not Running${info}..."
+        fi
+	    echo "....${good}OK"
+    done
+
+    pperceropidfiles=`ls -lat $perceropidfile* | awk '{print $9}'`
+    for pperceropidfile in $pperceropidfiles
+    do
+        rm $pperceropidfile
+    done
+}
+
+function stop_changewatcher {
+    pcwids=`ps -ef | grep ChangeWatcher | grep java | awk '{print $2}'`
+
+    for pid in $pcwids
+    do 
+        echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Stopping ChangeWatcher..."
+        if (ps $pid > /dev/null >& /dev/null)
+                then
+                    kill $pid > /dev/null >& /dev/null
+                else
+                    echo -n "${warn}Not Running${info}..."
+        fi
+		echo "....${good}OK"
+    done
+
+    pcwpidfiles=`ls -lat $cwpidfile* | awk '{print $9}'`
+    for pcwpidfile in $pcwpidfiles
+    do
+        rm $pcwpidfile
+    done
+}
+
+function stop_rabbitmq {
+    echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Stopping RabbitMQ..."
+    service rabbitmq-server stop > /dev/null >& /dev/null
+    if [ $? -eq 1 ]
+    then
+        echo ".${warn}FAIL"
+	else
+	    echo "....${good}OK"
+    fi
+}
+
+function stop_redis {
+	echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Stopping redis-server..."
+	    service redis-server stop > /dev/null >& /dev/null
+	    if [ $? -eq 1 ]
+	    then
+			echo "...${warn}FAIL"
+		else
+		    echo ".....${good}OK"
+	    fi
+}
+
+function stop {
+    if [ -n "$1" ]
+    then
+        case "$1" in
+          "redis") stop_redis
+            ;;
+          "rabbitmq") stop_rabbitmq 
+            ;;
+          "gateway") stop_gateway 
+            ;;
+          "perceroagent") stop_perceroagent
+            ;;
+          "changewatcher") stop_changewatcher
+            ;;
+          *) usage
+            ;;
+          esac
+    else 
+	    echo "${info}Stopping PF Server stack"
+	    stop_perceroagent
+	    stop_changewatcher
+	    stop_gateway
+	    stop_rabbitmq
+	    stop_redis
+    fi
+}
+
+function check_perceroagent {
+	emptyString=''
+    pperceropidfiles=`ls -lat $perceropidfile* | awk '{print $9}'`
+
+    for pperceropidfile in $pperceropidfiles
+    do
+		nextPID=`sed '/^\#/d' $pperceropidfile`
+		perceroNumber="${pperceropidfile/$perceropidfile/$emptyString}"
+
+		echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Checking PerceroAgent ${perceroNumber}..."
+		if (ps $nextPID > /dev/null >& /dev/null)
+			then
+				echo ".......${good}RUNNING"
+			else
+				echo "...${warn}NOT RUNNING"
+				swap_log_file "${percerolog}${perceroNumber}"
+				start_perceroagent $perceroNumber
+		fi
+    done
+
+	# Now grab a list of all valid PIDs.  Need to grab in separate loop because some may have been started in previous loop
+	validPIDs=();
+    for pperceropidfile in $pperceropidfiles
+    do
+		nextPID=`sed '/^\#/d' $pperceropidfile`
+
+		# Add PID to list of valid process IDs
+		validPIDs=("${validPIDs[@]}" "${nextPID}")
+    done
+
+	echo "${info}$(date +"%Y-%m-%d %H:%M:%S"): Checking for rogue Processes"
+    pperceroids=`ps -ef | grep AgentListener | grep java | awk '{print $2}'`
+
+    for pid in $pperceroids
+    do 
+		echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Validing ${pid}..."
+		if (containsElement $pid "${validPIDs[@]}")
+			then
+				echo "${good}VALID";
+			else
+				echo "..${warn}BAD";
+				echo -n "$(date +"%Y-%m-%d %H:%M:%S"): Killing Process ${pid}...";
+				kill $pid > /dev/null >& /dev/null
+				echo "...${good}OK"
+		fi
+    done
+
+}
+
+function check_changewatcher {
+	emptyString=''
+    pcwpidfiles=`ls -lat $cwpidfile* | awk '{print $9}'`
+
+    for pcwpidfile in $pcwpidfiles
+    do
+		nextPID=`sed '/^\#/d' $pcwpidfile`
+		cwNumber="${pcwpidfile/$cwpidfile/$emptyString}"
+
+		echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Checking ChangeWatcher ${cwNumber}..."
+		if (ps $nextPID > /dev/null >& /dev/null)
+			then
+				echo ".......${good}RUNNING"
+			else
+				echo "...${warn}NOT RUNNING"
+				# Swap the log file so we can capture whatever went wrong
+				swap_log_file "${cwlog}${cwNumber}"
+				start_changewatcher $cwNumber
+		fi
+    done
+
+	# Now grab a list of all valid PIDs.  Need to grab in separate loop because some may have been started in previous loop
+	validPIDs=();
+    for pcwpidfile in $pcwpidfiles
+    do
+		nextPID=`sed '/^\#/d' $pcwpidfile`
+
+		# Add PID to list of valid process IDs
+		validPIDs=("${validPIDs[@]}" "${nextPID}")
+    done
+
+	echo "${info}Checking for rogue Processes"
+    pcwids=`ps -ef | grep ChangeWatcher | grep java | awk '{print $2}'`
+
+    for pid in $pcwids
+    do 
+		echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Validing ${pid}..."
+		if (containsElement $pid "${validPIDs[@]}")
+			then
+				echo "${good}VALID";
+			else
+				echo "..${warn}BAD";
+				echo -n "$(date +"%Y-%m-%d %H:%M:%S"): Killing Process ${pid}...";
+				kill $pid > /dev/null >& /dev/null
+				echo "...${good}OK"
+		fi
+    done
+
+}
+
+function swap_log_file() {
+	file=${1}
+	if [ -f "$file" ]
+		then
+			now=$(date +"%Y.%m.%d_%H.%M.%S")
+			swap_file="${file}_${now}.log"
+			move_result=`mv $file $swap_file`
+			touch $file
+	fi
+
+}
+
+function containsElement () {
+  local e
+  for e in "${@:2}"; do [[ "$e" == "$1" ]] && return 0; done
+  return 1
+}
+
+function check {
+    if [ -n "$1" ]
+    then	
+	case "$1" in
+#          "redis") status_redis
+#            ;;
+#          "rabbitmq") status_rabbitmq
+#            ;;
+#          "gateway") status_gateway 
+#            ;;
+          "perceroagent") check_perceroagent 
+            ;;
+          "changewatcher") check_changewatcher 
+            ;;
+          *) usage
+            ;;
+	esac
+    else 
+	    echo "${info}$(date +"%Y-%m-%d %H:%M:%S"): Checking PF Server stack check..."
+#	    check_rabbitmq
+#	    check_redis
+#	    check_gateway
+	    check_perceroagent
+	    check_changewatcher
+   fi
+}
+
+function showlog {
+    if [ -e $logdir ]
+	then
+	tail -f -n 5 $logdir/* $logdir/pfserver/* $rabbitmqlogdir/*.log $redislogfile
+	fi
+}
+
+function status_rabbitmq {
+    echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Checking RabbitMQ status..."
+    service rabbitmq-server status > /dev/null >& /dev/null
+    if [ $? -eq 1 ]
+    then
+        echo "${warn}Not Running"
+    else
+        echo "${good}Running"
+    fi
+}
+
+function status_perceroagent {
+    counter=0
+    while [[ "$numperceros" > "$counter" ]]
+    do
+            echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Checking PerceroAgent${counter} status..."
+            if [ -e $perceropidfile${counter} ]
+            then
+                pid=`cat $perceropidfile${counter}`
+                if (ps $pid > /dev/null >& /dev/null)
+                then
+                    echo "${good}Running"
+                else
+                    echo "${warn}Not Running"
+                fi
+            else
+                echo "${warn}Not Running"
+            fi
+         let counter+=1
+    done
+}
+
+function status_changewatcher {
+    counter=0
+    while [[ "$numchangewatchers" > "$counter" ]]
+    do
+            echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Checking ChangeWatcher${counter} status..."
+            if [ -e $cwpidfile${counter} ]
+            then
+                pid=`cat $cwpidfile${counter}`
+                if (ps $pid > /dev/null >& /dev/null)
+                then
+                    echo "${good}Running"
+                else
+                    echo "${warn}Not Running"
+                fi
+            else
+                echo "${warn}Not Running"
+            fi
+         let counter+=1
+    done
+}
+
+function status_gateway {
+    echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Checking Gateway status..."
+    if [ -e $gatepidfile ]
+    then
+        pid=`cat $gatepidfile`
+        if (ps $pid > /dev/null >& /dev/null)
+        then
+            echo "${good}Running"
+        else
+            echo "${warn}Not Running"
+        fi
+    else
+        echo "${warn}Not Running"
+    fi
+}
+
+function status_redis {
+    echo -n "${info}$(date +"%Y-%m-%d %H:%M:%S"): Checking redis-server status..."
+    service redis-server status > /dev/null >& /dev/null
+    if [ $? -eq 1 ]
+    then
+echo "${warn}Not Running"
+    else
+echo "${good}Running"
+    fi
+}
+
+function status {
+    if [ -n "$1" ]
+    then	
+	case "$1" in
+          "redis") status_redis
+            ;;
+          "rabbitmq") status_rabbitmq
+            ;;
+          "gateway") status_gateway 
+            ;;
+          "perceroagent") status_perceroagent 
+            ;;
+          "changewatcher") status_changewatcher 
+            ;;
+          *) usage
+            ;;
+	esac
+    else 
+	    echo "${info}$(date +"%Y-%m-%d %H:%M:%S"): Checking PF Server stack status..."
+	    status_rabbitmq
+	    status_perceroagent
+	    status_changewatcher
+	    status_gateway
+	    status_redis
+    fi
+}
+
+function checkMem {
+   freemem=`free -m | grep Mem | awk '{print $4}'`
+   freemem=`echo "$freemem * 0.75" | bc`
+
+   eachMem=`echo "$freemem/$numperceros" | bc`
+   eachMem=`echo "$freemem/$numchangewatchers" | bc`
+   eachMem=`echo ${eachMem%.*}`
+   jarMem="-Xms${eachMem}M"
+}
+
+function usage {
+    echo "Unknown command: $1 $2"
+    echo "Usage:"
+    echo "./pfcontrol command [redis|rabbitmq|gateway|perceroagent|changewatcher]"
+    echo "   The following are valid commands:"
+    echo "     start - Start the PF Server"
+    echo "     stop - Stop the PF Server"
+    echo "     restart - Restart the PF Server"
+    echo "     status - Show the current status of the PF Server"
+    echo "     log     - Tail and follow the PF Server log"
+    echo "./pfcontrol checkmem"
+}
+
+# Make sure the logging directory exists
+if [ ! -e $logdir ]
+then
+    mkdir $logdir
+fi
+
+if [ "$1" = "start" ] 
+then
+    if [ -n "$2" ]
+    then
+	case "$2" in
+	  "redis"|"rabbitmq"|"gateway"|"perceroagent"|"changewatcher") start "$2"
+	    ;;
+	  *) usage
+	    ;;
+	esac
+    else
+      start
+    fi
+elif [ "$1" = "stop" ] 
+then
+    if [ -n "$2" ]
+    then
+        case "$2" in
+          "redis"|"rabbitmq"|"gateway"|"perceroagent"|"changewatcher") stop "$2"
+            ;;
+          *) usage
+            ;;
+        esac
+    else
+      stop 
+    fi
+elif [ "$1" = "log" ]
+then
+    showlog
+elif [ "$1" = "restart" ]
+then
+    
+    if [ -n "$2" ]
+    then
+        case "$2" in
+          "redis"|"rabbitmq"|"gateway"|"perceroagent"|"changewatcher") 
+		stop "$2"
+		sleep 5
+		start "$2"
+            ;;
+          *) usage
+            ;;
+        esac
+    else 
+	    stop
+	    sleep 5 
+	    start
+    fi
+elif [ "$1" = "check" ]
+then
+    
+    if [ -n "$2" ]
+    then
+        case "$2" in
+          "redis"|"rabbitmq"|"gateway"|"perceroagent"|"changewatcher") 
+		check "$2"
+            ;;
+          *) usage
+            ;;
+        esac
+    else 
+	    check
+    fi
+elif [ "$1" = "status" ]
+then
+    if [ -n "$2" ]
+    then
+        case "$2" in
+          "redis"|"rabbitmq"|"gateway"|"perceroagent"|"changewatcher") status "$2"
+            ;;
+          *) usage
+            ;;
+        esac
+    else
+      status
+    fi
+else
+    usage $1
+fi
+echo "${reset}"

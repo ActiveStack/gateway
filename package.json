@@ -1,0 +1,46 @@
+{
+  "name": "activestack-gateway",
+  "version": "1.0.0",
+  "release_date": "2015-08-08",
+  "description": "Socket server for the ActiveStack",
+  "main": "src/main.js",
+  "dependencies": {
+    "amqp": "^0.1.8",
+    "injecterooski": "*",
+    "node-properties-parser": "^0.0.2",
+    "redis": "^0.12.1",
+    "socket.io": "git://github.com/curb47/socket.io.git",
+    "socket.io-client": "^0.9.9",
+    "webkit-devtools-agent": "^0.3.1",
+    "winston": "^0.6.2"
+  },
+  "devDependencies": {
+    "chai": "*",
+    "mocha": "*",
+    "chance": "*",
+    "sinon": "*",
+    "timekeeper": "*"
+  },
+  "scripts": {
+    "test": "mocha --recursive test/unit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/percero/node-gateway.git"
+  },
+  "keywords": [
+    "Node",
+    "Socket",
+    "ActiveStack"
+  ],
+  "author": "Jonathan Samples",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/percero/node-gateway/issues"
+  },
+  "homepage": "https://github.com/percero/node-gateway#readme",
+  "bin": {
+    "activestack-gateway": "bin/activestack-gateway.js"
+  },
+  "preferGlobal": "true"
+}
