@@ -1,6 +1,8 @@
 ActiveStack Gateway
 ===================
 
+[![Circle CI](https://circleci.com/gh/ActiveStack/gateway/tree/master.svg?style=svg)](https://circleci.com/gh/ActiveStack/gateway/tree/master)
+
 Introduction
 ------------
 
