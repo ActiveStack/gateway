@@ -261,6 +261,9 @@ GatewayClient.prototype.processResponse = function(response){
         case 'AuthenticateOAuthAccessTokenResponse':
             this.logUserInWithAuthResponse(response);
             break;
+        case 'AuthenticationResponse':
+            this.logUserInWithAuthResponse(response);
+            break;
         case 'ConnectResponse':
             this.logger.verbose('Handling ConnectResponse for client ' + response.clientId);
             if (!response.clientId) {
@@ -505,6 +508,8 @@ GatewayClient.UNAUTH_EVENTS = [
     'authenticateOAuthAccessToken',
     'authenticateOAuthCode',
     'authenticateUserAccount',
+    'authenticate',
+    'reauthenticate',
     'getAllServiceProviders',
     'getOAuthRequestToken',
     'getRegAppOAuths',
@@ -556,7 +561,7 @@ GatewayClient.prototype.registerEvents = function() {
 
 GatewayClient.prototype.onSocketEvent = function(eventName, request){
     if (request !== undefined) {
-        this.logger.verbose('Got request (' + eventName + ')');
+        this.logger.info('Got request (' + eventName + ')');
         this.logger.verbose('Request details: ', request);
 
         if (this.sendToAgent(eventName, request) ) {
