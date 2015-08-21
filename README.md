@@ -14,7 +14,7 @@ Installation
 
 ### Prerequisites
 
-* Node >= 0.10
+* Node = 0.10.x
 * Redis
 * RabbitMQ
 
