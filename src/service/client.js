@@ -561,7 +561,7 @@ GatewayClient.prototype.registerEvents = function() {
 
 GatewayClient.prototype.onSocketEvent = function(eventName, request){
     if (request !== undefined) {
-        this.logger.info('Got request (' + eventName + ')');
+        this.logger.verbose('Got request (' + eventName + ')');
         this.logger.verbose('Request details: ', request);
 
         if (this.sendToAgent(eventName, request) ) {
