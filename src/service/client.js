@@ -261,6 +261,9 @@ GatewayClient.prototype.processResponse = function(response){
         case 'AuthenticateOAuthAccessTokenResponse':
             this.logUserInWithAuthResponse(response);
             break;
+        case 'AuthenticationResponse':
+            this.logUserInWithAuthResponse(response);
+            break;
         case 'ConnectResponse':
             this.logger.verbose('Handling ConnectResponse for client ' + response.clientId);
             if (!response.clientId) {
@@ -505,6 +508,8 @@ GatewayClient.UNAUTH_EVENTS = [
     'authenticateOAuthAccessToken',
     'authenticateOAuthCode',
     'authenticateUserAccount',
+    'authenticate',
+    'reauthenticate',
     'getAllServiceProviders',
     'getOAuthRequestToken',
     'getRegAppOAuths',
