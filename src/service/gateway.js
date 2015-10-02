@@ -2,7 +2,7 @@
 
 var io = require('socket.io');
 var Client = require('./client');
-var RedisStore = require('socket.io/lib/stores/redis');
+//var RedisStore = require('socket.io/lib/stores/redis');
 
 module.exports = Gateway;
 
@@ -52,11 +52,11 @@ Gateway.prototype.initHttpServer = function(){
 };
 
 Gateway.prototype.initRedis = function() {
-    this.redisStore = this.redisStoreFactory.instance();
-
-    this.attachRedisErrorHandlers('Publisher', this.redisStore.pub);
-    this.attachRedisErrorHandlers('Subscriber', this.redisStore.sub);
-    this.attachRedisErrorHandlers('Client', this.redisStore.cmd);
+    //this.redisStore = this.redisStoreFactory.instance();
+    //
+    //this.attachRedisErrorHandlers('Publisher', this.redisStore.pub);
+    //this.attachRedisErrorHandlers('Subscriber', this.redisStore.sub);
+    //this.attachRedisErrorHandlers('Client', this.redisStore.cmd);
 };
 
 Gateway.prototype.initSocketIO = function() {
@@ -80,7 +80,7 @@ Gateway.prototype.onRabbitReady = function () {
     this.exchange.on('error', this.gatewayWorker.createErrorHandler('RabbitMQ Exchange'));
 
     // Handles a new client socket connection.
-    this.sio.sockets.on('connection',this.onSocketConnection.bind(this));
+    this.sio.on('connection',this.onSocketConnection.bind(this));
 
     this.rabbitmq.on('error', this.gatewayWorker.createErrorHandler('RabbitMQ'));
 }
@@ -204,7 +204,7 @@ Gateway.prototype.trapRedisCleanup = function(type, redis) {
 Gateway.prototype.start = function(){
     this.httpServer.listen(
         this.properties['frontend.port'],
-        this.properties['frontend.host'],
+        //this.properties['frontend.host'],
         function () {
             this.logger.info('Gateway ready on http' + (this.useSsl ? 's' : '') + '://' +
                 (this.properties['frontend.host'] || '*') + ':' + (this.properties['frontend.port']));
