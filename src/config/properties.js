@@ -1,4 +1,5 @@
-propParser = require('node-properties-parser');
+var propParser = require('properties-parser'),
+    fs         = require('fs');
 
 function Properties(fileName) {
     this.fileName = fileName;
@@ -11,13 +12,13 @@ Properties.prototype.inject = function(prefixedLogger){
     var properties;
     if(this.fileName && this.fileName !== '')
         try{
-            properties = propParser.readSync(this.fileName);
+            properties = propParser.parse(fs.readFileSync(this.fileName));
         }catch(e){
             console.log('Could not load properties file from '+this.fileName);
         }
 
     if(!properties)
-        properties = propParser.readSync(__dirname + '/../../resources/env.default.properties');
+        properties = propParser.parse(fs.readFileSync(__dirname + '/../../resources/env.default.properties'));
 
     for(var key in properties){
         this[key] = properties[key];
