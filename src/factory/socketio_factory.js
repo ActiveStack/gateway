@@ -36,7 +36,7 @@ SocketIOFactory.prototype.instance = function(){
         this.sio = io(httpServer, options);
         this.sio.set('heartbeat timeout', this.properties['gateway.socketio.timeout']);
         this.sio.set('heartbeat interval', this.properties['gateway.socketio.interval']);
-        this.sio.set('transports', ['websocket', 'flashsocket']);
+        //this.sio.set('transports', ['websocket', 'flashsocket']);
         this.sio.adapter(this.redisStoreFactory.instance());
 
         // Start the Flash Policy Server
