@@ -31,10 +31,6 @@ GatewayWorker.prototype.checkMemoryUsage = function () {
             this.logger.error('Worker exceeded hard ' + type + ' memory limit (' +
             memoryUsage[type] + '/' + limit * megabyte + ')!');
         }
-        if (warning && (memoryUsage[type] > warning * megabyte)) {
-            this.logger.warn('Worker exceeded soft ' + type + ' memory limit (' +
-            memoryUsage[type] + '/' + warning * megabyte + ')!');
-        }
     }
 };
 
