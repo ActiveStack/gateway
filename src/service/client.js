@@ -83,6 +83,7 @@ GatewayClient.prototype.dispose = function() {
                 this.logger.verbose('Unable to close clientQueue ' + this.clientQueue);
             }
         }
+        this.clientQueue.destroy();
         this.clientQueue = undefined;
     }
 
