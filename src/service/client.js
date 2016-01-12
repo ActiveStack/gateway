@@ -205,6 +205,21 @@ GatewayClient.prototype.onReconnect = function(message) {
     }
     this.session.clientId = newClientId;
     this.onConnect(message);
+
+    // We assume that the client is already authenticated by their reconnect.message.  So send the reconnect
+    //  request to the server (the server will fail if the client is NOT authenticated, which is where the real
+    //  auth check is performed).
+    if (this.session.isLoggedIn() && this.session.existingClientId && this.session.existingClientId !== this.session.clientId) {
+        var reconnectMessage = this.session.populateMessage({
+            cn: 'com.percero.agents.sync.vo.ReconnectRequest',
+            existingClientId: this.session.existingClientId,
+            existingClientIds: this.session.existingClientIds
+        });
+        this.logger.verbose('Reconnect Message for session client ' + this.session.clientId
+            + ': ' + JSON.stringify(reconnectMessage));
+        this.sendToAgent('reconnect', reconnectMessage);
+
+    }
 };
 
 ///////////////////////////////////
