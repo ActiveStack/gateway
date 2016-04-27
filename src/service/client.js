@@ -523,6 +523,7 @@ GatewayClient.UNAUTH_EVENTS = [
     'authenticateOAuthAccessToken',
     'authenticateOAuthCode',
     'authenticateUserAccount',
+    'register',
     'authenticate',
     'reauthenticate',
     'getAllServiceProviders',
