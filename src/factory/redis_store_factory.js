@@ -18,17 +18,16 @@ RedisStoreFactory.prototype.instance = function(){
             max_attempts: this.properties['gateway.redis.max_attempts'],
             enable_offline_queue: this.properties['gateway.redis.offline_queue'] == 'true'
         };
-        
+
         this.redisStore = new RedisStore({
-           redisPub: redisOptions,
-           redisSub: redisOptions,
-           redisClient: redisOptions
+            redisPub: redisOptions,
+            redisSub: redisOptions,
+            redisClient: redisOptions
         });
-        
+
         this.redisStore.pub.auth(this.properties['gateway.redis.password']);
         this.redisStore.sub.auth(this.properties['gateway.redis.password']);
         this.redisStore.cmd.auth(this.properties['gateway.redis.password']);
-        this.redisStore = redis(options);
     }
 
     return this.redisStore;
