@@ -29,11 +29,11 @@ function GatewayClient(socket, exchange, rabbitmq, logger, properties, sessionFa
 
     this.logger.verbose('New GatewayClient for socket.');
 
-    this.session = sessionFactory.create();	// Client's session, which also defines client's session ID (reconnectId)
+    this.session = sessionFactory.create(); // Client's session, which also defines client's session ID (reconnectId)
 
-    this.awaitingResponseAcks = {};	// Holds callback functions for client message ACK's.
-    this.awaitingResponseAcksInterval = {};	// Message ACK Intervals for client message re-sends.
-    this.clientQueue = null;	// Client RabbitMQ Queue
+    this.awaitingResponseAcks = {}; // Holds callback functions for client message ACK's.
+    this.awaitingResponseAcksInterval = {}; // Message ACK Intervals for client message re-sends.
+    this.clientQueue = null;    // Client RabbitMQ Queue
     this.disposed = false;
 
     this.init();
@@ -91,7 +91,7 @@ GatewayClient.prototype.dispose = function() {
 
 GatewayClient.prototype.init = function() {
     ///////////////////////////////////
-    //	Socket Handlers
+    //  Socket Handlers
     ///////////////////////////////////
 
     /**
@@ -142,7 +142,7 @@ GatewayClient.prototype.onAck = function(message) {
     var ack = this.awaitingResponseAcks[message.correspondingMessageId];
     if (!ack) {
         // We typically get here when:
-        //	We re-sent the message because the client did not ACK in time, but in the meantime the client DID ACK and thus the re-send turned out to be superfluous.
+        //  We re-sent the message because the client did not ACK in time, but in the meantime the client DID ACK and thus the re-send turned out to be superfluous.
         this.logger.warn('Unexpected response ack: ', message.correspondingMessageId);
     }
     else {
@@ -187,9 +187,9 @@ GatewayClient.prototype.onReconnect = function(message) {
     }
 
     // The reconnectId is an encoded string that should contain all required details to re-establish the
-    //	session, including the previous ClientID, which we save and then swap out for the new/current ClientID
+    //  session, including the previous ClientID, which we save and then swap out for the new/current ClientID
     var newClientId = this.session.clientId;
-    this.session.load(message.reconnectId);	// Decrypts the reconnectId
+    this.session.load(message.reconnectId); // Decrypts the reconnectId
     if (!this.session.existingClientIds) {
         this.session.existingClientIds = [];
     }
@@ -205,14 +205,27 @@ GatewayClient.prototype.onReconnect = function(message) {
     }
     this.session.clientId = newClientId;
     this.onConnect(message);
+
+    if (this.session.isLoggedIn() && this.session.existingClientId && this.session.existingClientId !== this.session.clientId) {
+        var reconnectMessage = this.session.populateMessage({
+            cn: 'com.percero.agents.sync.vo.ReconnectRequest',
+            existingClientId: this.session.existingClientId,
+            existingClientIds: this.session.existingClientIds
+        });
+        this.logger.verbose('Reconnect Message for session client ' + this.session.clientId
+            + ': ' + JSON.stringify(reconnectMessage));
+        this.sendToAgent('reconnect', reconnectMessage);
+
+    }
+
 };
 
 ///////////////////////////////////
-//	Helper Functions
+//  Helper Functions
 ///////////////////////////////////
 /**
  * routeSpecialMessage - If a specialMessageHandler is defined for the message type:
- *	1. Pipe this message to that handler
+ *  1. Pipe this message to that handler
  */
 GatewayClient.prototype.routeSpecialMessage = function(type, message) {
     if (this.specialMessageHandlers[type]) {
@@ -293,7 +306,6 @@ GatewayClient.prototype.processResponse = function(response){
  * @param response
  */
 GatewayClient.prototype.logUserInWithUserToken = function(response) {
-
     if (response.user) {
         if (response.user.hasOwnProperty("ID"))
             this.session.userId = response.user.ID;
@@ -384,15 +396,15 @@ GatewayClient.prototype.onClientQueueMessage = function(response, headers, info,
     if (response.EOL) {
         // This is an End-Of-Life message for this queue.
         // If the response clientId does NOT match the current session clientId, then this client has
-        //	already moved on and nothing needs to happen here. This typically happens when a client
-        //	reconnects from the same network/IP address/router.
+        //  already moved on and nothing needs to happen here. This typically happens when a client
+        //  reconnects from the same network/IP address/router.
         if (response.clientId && response.clientId !== this.session.clientId) {
             this.logger.verbose('Ignoring EOL message for ' + response.clientId + ' -> ' + this.session.clientId);
             return;
         }
         else {
             // This client is no longer valid. This typically happens when a client reconnects
-            //	from a different network/IP address/router.
+            //  from a different network/IP address/router.
             this.logger.verbose('Received EOL for queue ' + this.session.clientId);
             this.isServerTerminated = true;
             this.dispose();
@@ -409,7 +421,7 @@ GatewayClient.prototype.onClientQueueMessage = function(response, headers, info,
     }
 
     this.processResponse(response);
-    this.sendSession();	// Send the updated session to the client.
+    this.sendSession(); // Send the updated session to the client.
 
     if (response.correspondingMessageId) {
         this.setupResendInterval(response, receipt);
@@ -495,8 +507,8 @@ GatewayClient.prototype.onClientQueueDeleted = function(){
 
 /**
  * registerResponseQueue - Sets up a new RabbitMQ Queue for this client, using the session.clientId as the
- *	name for the queue. Once the queue is setup, subscribes to the queue. This queue is for messages from the
- *	ActiveStack back-end that are intended for the client.
+ *  name for the queue. Once the queue is setup, subscribes to the queue. This queue is for messages from the
+ *  ActiveStack back-end that are intended for the client.
  */
 GatewayClient.prototype.registerResponseQueue = function() {
     this.logger.verbose('Setting up rabbit queue ' + this.session.clientId);
@@ -508,6 +520,7 @@ GatewayClient.UNAUTH_EVENTS = [
     'authenticateOAuthAccessToken',
     'authenticateOAuthCode',
     'authenticateUserAccount',
+    'register',
     'authenticate',
     'reauthenticate',
     'getAllServiceProviders',
@@ -547,7 +560,7 @@ GatewayClient.AUTH_EVENTS = [
 
 /**
  * registerEvents - Add agent to list of agents, setting up listeners for each event type the agent handles.
- *	Unregister the agent first in case it is already registered.
+ *  Unregister the agent first in case it is already registered.
  */
 GatewayClient.prototype.registerEvents = function() {
     GatewayClient.UNAUTH_EVENTS.forEach(function(eventName) {
@@ -590,8 +603,8 @@ GatewayClient.prototype.onAuthSocketEvent = function(eventName, request){
 
 /**
  * sendToAgent - Send the message to the specified agent via RabbitMQ client queue.  If the message.clientId
- *	is different than the session.clientId, update the message.clientId to match the session.clientId. This is
- *	an enabler for legacy clients that are unable to update their clientId upon reconnect.
+ *  is different than the session.clientId, update the message.clientId to match the session.clientId. This is
+ *  an enabler for legacy clients that are unable to update their clientId upon reconnect.
  */
 GatewayClient.prototype.sendToAgent = function(name, message, callback) {
     this.logger.verbose( 'Sending to agent (' + name + '): ', JSON.stringify(message) );
@@ -605,7 +618,7 @@ GatewayClient.prototype.sendToAgent = function(name, message, callback) {
     else {
         if (message.clientId && message.clientId !== this.session.clientId) {
             // The message's clientId does not match the session's clientId.  This typically happens after a device has reconnected
-            //	and the client library does not update to it's new clientId.
+            //  and the client library does not update to it's new clientId.
             this.logger.verbose('Message client ' + message.clientId + ' is different than Session client ' + this.session.clientId);
             message.clientId = this.session.clientId;
         }

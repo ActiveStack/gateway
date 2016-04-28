@@ -172,7 +172,7 @@ Gateway.prototype.handleError = function(error, source) {
 
     this.httpServer.close();
 };
-	
+    
 Gateway.prototype.onShutdown = function(shutdownType) {
     this.logger.info('Closing down Socket IO Server');
 
@@ -181,7 +181,7 @@ Gateway.prototype.onShutdown = function(shutdownType) {
     }.bind(this));
 };
 
-	// RedisClient resists proper error handling :-(
+    // RedisClient resists proper error handling :-(
 Gateway.prototype.attachRedisErrorHandlers = function(type, redis) {
     var handler = this.gatewayWorker.createErrorHandler('Redis Store ' + type);
     redis.on('error', handler);

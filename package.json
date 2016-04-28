@@ -1,7 +1,7 @@
 {
   "name": "activestack-gateway",
-  "version": "0.2.0",
-  "release_date": "2015-09-24",
+  "version": "0.2.1",
+  "release_date": "2016-04-28",
   "description": "Socket server for ActiveStack",
   "main": "src/main.js",
   "dependencies": {
@@ -20,6 +20,9 @@
     "chance": "*",
     "sinon": "*",
     "timekeeper": "*"
+  },
+  "engines": {
+    "node": "4.1.1"
   },
   "scripts": {
     "test": "mocha --recursive test/unit"
