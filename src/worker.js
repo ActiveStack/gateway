@@ -31,6 +31,10 @@ GatewayWorker.prototype.checkMemoryUsage = function () {
             this.logger.error('Worker exceeded hard ' + type + ' memory limit (' +
             memoryUsage[type] + '/' + limit * megabyte + ')!');
         }
+        if (warning && (memoryUsage[type] > warning * megabyte)) {
+            this.logger.warn('Worker exceeded soft ' + type + ' memory limit (' +
+            memoryUsage[type] + '/' + warning * megabyte + ')!');
+        }
     }
 };
 
@@ -129,7 +133,12 @@ GatewayWorker.prototype.onProcessMessage = function (msg) {
 
 GatewayWorker.prototype.createErrorHandler = function createErrorHandler(source) {
     return function (error) {
-        this.logger.error('Fatal ' + source + ' error: ', error.stack);
+        if (error.stack) {
+            this.logger.error('Fatal ' + source + ' error: ', error.stack);
+        }
+        else {
+            this.logger.error('Fatal ' + source + ' error: ', JSON.stringify(error));
+        }
 
         clearInterval(this.heartbeat);
         if (process.send && !this.exiting) {
@@ -148,7 +157,7 @@ GatewayWorker.prototype.catchAndWarn = function catchAndWarn(connection, cleanup
     try {
         cleanup();
     } catch (error) {
-        if (!this.exiting) {
+        if (this && !this.exiting) {
             this.logger.warn('Error disconnecting ' + connection + ' (' +error.toString() + ')');
         }
     }

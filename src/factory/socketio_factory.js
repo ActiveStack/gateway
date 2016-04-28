@@ -22,25 +22,28 @@ SocketIOFactory.prototype.inject = function(httpServerFactory, properties, redis
 SocketIOFactory.prototype.instance = function(){
     if(!this.sio){
         var httpServer = this.httpServerFactory.instance();
-
-        var options = {
-            logger: this.logger.extendPrefix('socket.io')
-        };
-
         if (this.ssl.useSsl) {
-            options.key = this.ssl.key;
-            options.cert = this.ssl.cert;
-            options.ca = this.ssl.ca;
+            this.sio = io.listen(httpServer, {
+                logger: this.logger.extendPrefix('socket.io'),
+                key: this.ssl.key,
+                cert: this.ssl.cert,
+                ca: this.ssl.ca
+            });
+        }
+        else {
+            this.sio = io.listen(httpServer, {logger: this.logger.extendPrefix('socket.io')});
         }
 
-        this.sio = io(httpServer, options);
-        this.sio.set('heartbeat timeout', this.properties['gateway.socketio.timeout']);
-        this.sio.set('heartbeat interval', this.properties['gateway.socketio.interval']);
-        //this.sio.set('transports', ['websocket', 'flashsocket']);
-        this.sio.adapter(this.redisStoreFactory.instance());
+        var redisStore = this.redisStoreFactory.instance();
+        this.sio.configure(function () {
+            this.sio.set('heartbeat timeout', this.properties['gateway.socketio.timeout']);
+            this.sio.set('heartbeat interval', this.properties['gateway.socketio.interval']);
+            this.sio.set('transports', ['websocket', 'flashsocket']);
+            this.sio.set('store', redisStore);
+        }.bind(this));
 
         // Start the Flash Policy Server
-        //this.sio.flashPolicyServer.on('error', this.gatewayWorker.createErrorHandler('Flash Policy Server'));
+        this.sio.flashPolicyServer.on('error', this.gatewayWorker.createErrorHandler('Flash Policy Server'));
 
     }
 
