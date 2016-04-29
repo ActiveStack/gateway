@@ -1,11 +1,10 @@
 {
   "name": "activestack-gateway",
-  "version": "0.2.1",
-  "release_date": "2016-04-28",
+  "version": "0.2.2",
+  "release_date": "2016-04-29",
   "description": "Socket server for ActiveStack",
   "main": "src/main.js",
   "dependencies": {
-    "amqp": "^0.1.8",
     "injecterooski": "*",
     "node-properties-parser": "^0.0.2",
     "redis": "^0.12.1",
