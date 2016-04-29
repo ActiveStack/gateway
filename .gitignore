@@ -11,11 +11,13 @@ npm-debug.log
 .project
 .settings/
 
-node_modules/webkit-devtools-agent
+#node_modules/webkit-devtools-agent
 
 *.iml
-node_modules
+#node_modules
 
-node_modules/*
+#node_modules/*
 
-/node_modules
+/node_modules/*
+!/node_modules/amqp
+!/node_modules/amqp/*
