@@ -170,7 +170,9 @@ Gateway.prototype.handleError = function(error, source) {
         }.bind(this));
     }.bind(this));
 
-    this.httpServer.close();
+    catchAndWarn('HTTP Server', function() {
+        this.httpServer.close();
+    }.bind(this));
 };
     
 Gateway.prototype.onShutdown = function(shutdownType) {
