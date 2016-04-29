@@ -1,6 +1,6 @@
 {
   "name": "activestack-gateway",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "release_date": "2016-04-29",
   "description": "Socket server for ActiveStack",
   "main": "src/main.js",
