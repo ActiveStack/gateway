@@ -1,4 +1,5 @@
 'use strict';
+
 var events = require('events');
 var util = require('util');
 var net = require('net');
@@ -12,11 +13,13 @@ var FrameType = require('./constants').FrameType;
 var definitions = require('./definitions');
 var methodTable = definitions.methodTable;
 var classes = definitions.classes;
-    
+
 // parser
 
-var maxFrameBuffer = 131072; // 128k, same as rabbitmq (which was
+var MAX_FRAME_BUFFER_DEFAULT = 131072; // 128k, same as rabbitmq (which was
                              // copying qpid)
+// var maxFrameBuffer = 2097152; // 128k, same as rabbitmq (which was
+//                              // copying qpid)
 
 // An interruptible AMQP parser.
 //
@@ -35,6 +38,7 @@ var maxFrameBuffer = 131072; // 128k, same as rabbitmq (which was
 var AMQPParser = module.exports = function AMQPParser (version, type) {
   this.isClient = (type == 'client');
   this.state = this.isClient ? 'frameHeader' : 'protocolHeader';
+  this.maxFrameBuffer = MAX_FRAME_BUFFER_DEFAULT;
 
   if (version != '0-9-1') this.throwError("Unsupported protocol version");
 
@@ -55,7 +59,7 @@ var AMQPParser = module.exports = function AMQPParser (version, type) {
       frameChannel = parseInt(fh, 2);
       var frameSize = parseInt(fh, 4);
       fh.used = 0; // for reuse
-      if (frameSize > maxFrameBuffer) {
+      if (frameSize > self.maxFrameBuffer) {
         self.throwError("Oversized frame " + frameSize);
       }
       frameBuffer = new Buffer(frameSize);
@@ -100,7 +104,7 @@ var AMQPParser = module.exports = function AMQPParser (version, type) {
           }
           break;
         case FrameType.HEARTBEAT:
-          debug("heartbeat");
+          debug && debug("heartbeat");
           if (self.onHeartBeat) self.onHeartBeat();
           break;
         default:
@@ -123,7 +127,7 @@ var AMQPParser = module.exports = function AMQPParser (version, type) {
 
 // If there's an error in the parser, call the onError handler or throw
 AMQPParser.prototype.throwError = function (error) {
-  if(this.onError) this.onError(error);
+  if (this.onError) this.onError(error);
   else throw new Error(error);
 };
 
@@ -132,8 +136,19 @@ AMQPParser.prototype.throwError = function (error) {
 AMQPParser.prototype.execute = function (data) {
   // This function only deals with dismantling and buffering the frames.
   // It delegates to other functions for parsing the frame-body.
-  debug('execute: ' + data.toString('hex'));
+  debug && debug('execute: ' + data.toString('hex'));
   this.parse = this.parse(data);
+};
+
+/**
+ * Set the maximum frame buffer size in bytes. The connection needs to change this
+ * if the server responds with a connection tune event where the maxFrameBuffer
+ * was changed in the server config.
+ *
+ * @param maxFrameBuffer the maximum frame buffer size in bytes
+ */
+AMQPParser.prototype.setMaxFrameBuffer = function(maxFrameBuffer) {
+  this.maxFrameBuffer = maxFrameBuffer;
 };
 
 
@@ -224,6 +239,9 @@ function parseValue (buffer) {
     case AMQPTypes.SIGNED_64BIT:
       return parseInt(buffer, 8);
 
+    case AMQPTypes.SIGNED_8BIT:
+      return parseInt(buffer, 1);
+
     case AMQPTypes.BOOLEAN:
       return (parseInt(buffer, 1) > 0);
 
@@ -257,21 +275,19 @@ function parseTable (buffer) {
   while (buffer.read < length) {
     table[parseShortString(buffer)] = parseValue(buffer);
   }
-  
+
   return table;
 }
 
 function parseFields (buffer, fields) {
   var args = {};
-
   var bitIndex = 0;
-
   var value;
 
   for (var i = 0; i < fields.length; i++) {
     var field = fields[i];
 
-    //debug("parsing field " + field.name + " of type " + field.domain);
+    //debug && debug("parsing field " + field.name + " of type " + field.domain);
 
     switch (field.domain) {
       case 'bit':
@@ -312,7 +328,7 @@ function parseFields (buffer, fields) {
       case 'longlong':
         value = new Buffer(8);
         for (var j = 0; j < 8; j++) {
-            value[j] = buffer[buffer.read++];
+          value[j] = buffer[buffer.read++];
         }
         break;
 
@@ -331,7 +347,7 @@ function parseFields (buffer, fields) {
       default:
         throw new Error("Unhandled parameter type " + field.domain);
     }
-    //debug("got " + value);
+    //debug && debug("got " + value);
     args[field.name] = value;
   }
 
@@ -357,7 +373,7 @@ AMQPParser.prototype._parseMethodFrame = function (channel, buffer) {
   var args = parseFields(buffer, method.fields);
 
   if (this.onMethod) {
-    debug("Executing method", channel, method, args);
+    debug && debug("Executing method", channel, method, args);
     this.onMethod(channel, method, args);
   }
 };
