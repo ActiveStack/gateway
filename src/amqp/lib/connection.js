@@ -16,10 +16,10 @@ var Exchange = require('./exchange');
 var Queue = require('./queue');
 var AMQPParser = require('./parser');
 var nodeAMQPVersion = require('../package').version;
-    
+
 var maxFrameBuffer = 131072; // 128k, same as rabbitmq (which was
                              // copying qpid)
-
+var channelMax = 65535;
 var defaultPorts = { 'amqp': 5672, 'amqps': 5671 };
 
 var defaultOptions = {
@@ -29,6 +29,7 @@ var defaultOptions = {
   password: 'guest',
   authMechanism: 'AMQPLAIN',
   vhost: '/',
+  connectionTimeout: 10000,
   ssl: {
     enabled: false
   }
@@ -59,15 +60,18 @@ var Connection = module.exports = function Connection (connectionArgs, options, 
   EventEmitter.call(this);
   this.setOptions(connectionArgs);
   this.setImplOptions(options);
-  
+
   if (typeof readyCallback === 'function') {
     this._readyCallback = readyCallback;
   }
-  
+
   this.connectionAttemptScheduled = false;
   this._defaultExchange = null;
   this.channelCounter = 0;
   this._sendBuffer = new Buffer(maxFrameBuffer);
+
+  this._blocked = false;
+  this._blockedReason = null;
 };
 util.inherits(Connection, EventEmitter);
 
@@ -97,10 +101,20 @@ Connection.prototype.reconnect = function () {
   for (var channel in this.channels) {
     this.channels[channel].state = 'closed';
   }
-  debug("Connection lost, reconnecting...");
+  debug && debug("Connection lost, reconnecting...");
   // Terminate socket activity
-  this.socket.end();
+  if (this.socket) this.socket.end();
   this.connect();
+};
+
+Connection.prototype.disconnect = function () {
+  debug && debug("Sending disconnect request to server");
+  this._sendMethod(0, methods.connectionClose, {
+    'replyText': 'client disconnect',
+    'replyCode': 200,
+    'classId': 0,
+    'methodId': 0
+  });
 };
 
 Connection.prototype.addAllListeners = function() {
@@ -123,26 +137,26 @@ Connection.prototype.addAllListeners = function() {
     };
 
     self.parser.onContent = function (channel, data) {
-      debug(channel + " > content " + data.length);
+      debug && debug(channel + " > content " + data.length);
       if (self.channels[channel] && self.channels[channel]._onContent) {
         self.channels[channel]._onContent(channel, data);
       } else {
-        debug("unhandled content: " + data);
+        debug && debug("unhandled content: " + data);
       }
     };
 
     self.parser.onContentHeader = function (channel, classInfo, weight, properties, size) {
-      debug(channel + " > content header " + JSON.stringify([classInfo.name, weight, properties, size]));
+      debug && debug(channel + " > content header " + JSON.stringify([classInfo.name, weight, properties, size]));
       if (self.channels[channel] && self.channels[channel]._onContentHeader) {
         self.channels[channel]._onContentHeader(channel, classInfo, weight, properties, size);
       } else {
-        debug("unhandled content header");
+        debug && debug("unhandled content header");
       }
     };
 
     self.parser.onHeartBeat = function () {
       self.emit("heartbeat");
-      debug("heartbeat");
+      debug && debug("heartbeat");
     };
 
     self.parser.onError = function (e) {
@@ -191,7 +205,7 @@ Connection.prototype.addAllListeners = function() {
       // channels that they are no longer connected so that nobody attempts
       // to send messages which would be doomed to fail.
       for (var channel in self.channels) {
-        if (channel !== 0) {
+        if (channel !== '0') {
           self.channels[channel].state = 'closed';
         }
       }
@@ -237,7 +251,6 @@ Connection.prototype.addAllListeners = function() {
         }, backoffTime);
       } else {
         self.removeListener('error', backoff);
-        self.emit('error', e);
       }
     }
   });
@@ -249,8 +262,7 @@ Connection.prototype.addAllListeners = function() {
     if (self.implOptions.reconnect) {
       // Reconnect any channels which were open.
       _.each(self.channels, function(channel, index) {
-        // FIXME why is the index "0" instead of 0?
-        if (index !== "0") channel.reconnect();
+        if (index !== '0') channel.reconnect();
       });
     }
 
@@ -268,9 +280,9 @@ Connection.prototype.addAllListeners = function() {
   // failing silently.
   self.addListener('end', function (){
     if (!this.readyEmitted){
-      this.emit('error', {
-        message: 'Connection ended: possibly due to an authentication failure.'
-      });
+      this.emit('error', new Error(
+        'Connection ended: possibly due to an authentication failure.'
+      ));
     }
   });
 };
@@ -291,8 +303,12 @@ Connection.prototype.exchange = function (name, options, openCallback) {
   if (!options) options = {};
   if (name !== '' && options.type === undefined) options.type = 'topic';
 
-  this.channelCounter++;
-  var channel = this.channelCounter;
+  try{
+    var channel = this.generateChannelId();
+  }catch(exception){
+    this.emit("error", exception);
+    return;
+  }
   var exchange = new Exchange(this, channel, name, options, openCallback);
   this.channels[channel] = exchange;
   this.exchanges[name] = exchange;
@@ -318,8 +334,12 @@ Connection.prototype.queue = function (name /* options, openCallback */) {
     callback = arguments[1];
   }
 
-  this.channelCounter++;
-  var channel = this.channelCounter;
+  try{
+    var channel = this.generateChannelId();
+  }catch(exception){
+    this.emit("error", exception);
+    return;
+  }
 
   var q = new Queue(this, channel, name, options, callback);
   this.channels[channel] = q;
@@ -351,7 +371,7 @@ Connection.prototype._bodyToBuffer = function (body) {
   } else {
     var jsonBody = JSON.stringify(body);
 
-    debug('sending json: ' + jsonBody);
+    debug && debug('sending json: ' + jsonBody);
 
     var props = {contentType: 'application/json'};
     return [props, new Buffer(jsonBody, 'utf8')];
@@ -387,15 +407,34 @@ Connection.prototype._outboundHeartbeatTimerReset = function () {
   }
 };
 
+Connection.prototype._saslResponse = function () {
+  var response;
+  if (this.options.authMechanism == 'AMQPLAIN')
+    response = {
+      LOGIN: this.options.login,
+      PASSWORD: this.options.password
+    };
+  else if (this.options.authMechanism == 'PLAIN')
+    response = "\0" + this.options.login + "\0" + this.options.password;
+  else if (this.options.authMechanism == 'EXTERNAL')
+    response = "\0";
+  else if (this.options.authMechanism == 'ANONYMOUS')
+    response = "\0";
+  else
+    response = this.options.response;
+
+  return response;
+}
+
 Connection.prototype._onMethod = function (channel, method, args) {
-  debug(channel + " > " + method.name + " " + JSON.stringify(args));
+  debug && debug(channel + " > " + method.name + " " + JSON.stringify(args));
 
   // Channel 0 is the control channel. If not zero then delegate to
   // one of the channel objects.
 
   if (channel > 0) {
     if (!this.channels[channel]) {
-      debug("Received message on untracked channel.");
+      debug && debug("Received message on untracked channel.");
       return;
     }
     if (!this.channels[channel]._onChannelMethod) {
@@ -422,10 +461,7 @@ Connection.prototype._onMethod = function (channel, method, args) {
       this._sendMethod(0, methods.connectionStartOk, {
         clientProperties: this.options.clientProperties,
         mechanism: this.options.authMechanism,
-        response: {
-          LOGIN: this.options.login,
-          PASSWORD: this.options.password
-        },
+        response: this._saslResponse(),
         locale: 'en_US'
       });
       break;
@@ -433,12 +469,18 @@ Connection.prototype._onMethod = function (channel, method, args) {
     // 4. The server responds with a connectionTune request
     case methods.connectionTune:
       if (args.frameMax) {
-          debug("tweaking maxFrameBuffer to " + args.frameMax);
+          debug && debug("tweaking maxFrameBuffer to " + args.frameMax);
           maxFrameBuffer = args.frameMax;
+          this._sendBuffer = new Buffer(maxFrameBuffer);
+          this.parser.setMaxFrameBuffer(maxFrameBuffer);
+      }
+      if (args.channelMax) {
+          debug && debug("tweaking channelMax to " + args.channelMax);
+          channelMax = args.channelMax;
       }
       // 5. We respond with connectionTuneOk
       this._sendMethod(0, methods.connectionTuneOk, {
-        channelMax: 0,
+        channelMax: channelMax,
         frameMax: maxFrameBuffer,
         heartbeat: this.options.heartbeat || 0
       });
@@ -471,6 +513,25 @@ Connection.prototype._onMethod = function (channel, method, args) {
         console.log('Unhandled connection error: ' + args.replyText);
       }
       this.socket.destroy(e);
+      break;
+
+    case methods.connectionCloseOk:
+      debug && debug("Received close-ok from server, closing socket");
+      this.socket.end();
+      break;
+
+    case methods.connectionBlocked:
+      debug && debug('Received connection.blocked from server with reason: ' + args.reason);
+      this._blocked = true;
+      this._blockedReason = args.reason;
+      this.emit('blocked');
+      break;
+
+    case methods.connectionUnblocked:
+      debug && debug('Received connection.unblocked from server');
+      this._blocked = false;
+      this._blockedReason = null;
+      this.emit('unblocked');
       break;
 
     default:
@@ -506,7 +567,7 @@ Connection.prototype._parseURLOptions = function(connectionString) {
 /*
  *
  * Connect helpers
- * 
+ *
  */
 
 // If you pass a array of hosts, lets choose a random host or the preferred host number, or then next one.
@@ -514,13 +575,13 @@ Connection.prototype._chooseHost = function() {
   if(Array.isArray(this.options.host)){
     if(this.hosti == null){
       if(typeof this.options.hostPreference == 'number') {
-        this.hosti = (this.options.hostPreference < this.options.host.length) ? 
-          this.options.hostPreference : this.options.host.length-1; 
-      } else {   
+        this.hosti = (this.options.hostPreference < this.options.host.length) ?
+          this.options.hostPreference : this.options.host.length-1;
+      } else {
         this.hosti = parseInt(Math.random() * this.options.host.length, 10);
       }
     } else {
-      // If this is already set, it looks like we want to choose another one. 
+      // If this is already set, it looks like we want to choose another one.
       // Add one to hosti but don't overflow it.
       this.hosti = (this.hosti + 1) % this.options.host.length;
     }
@@ -531,22 +592,49 @@ Connection.prototype._chooseHost = function() {
 };
 
 Connection.prototype._createSocket = function() {
-  var hostName = this._chooseHost(), self = this;
+  var hostName = this._chooseHost(), self = this, port = this.options.port;
+  var parsedHost = URL.parse(hostName);
+  if(parsedHost.port){
+    hostName = parsedHost.hostname;
+    port = parsedHost.port;
+  }
 
   var options = {
-    port: this.options.port,
+    port: port,
     host: hostName
+  };
+
+  // Disable tcp nagle's algo
+  // Default: true, makes small messages faster
+  var noDelay = this.options.noDelay || true;
+
+  var resetConnectionTimeout = function () {
+    debug && debug('connected so resetting connection timeout');
+    this.setTimeout(0);
   };
 
   // Connect socket
   if (this.options.ssl.enabled) {
-    debug('making ssl connection');
+    debug && debug('making ssl connection');
     options = _.extend(options, this._getSSLOptions());
-    this.socket = tls.connect(options);
+    this.socket = tls.connect(options, resetConnectionTimeout);
   } else {
-    debug('making non-ssl connection');
-    this.socket = net.connect(options);
+    debug && debug('making non-ssl connection');
+    this.socket = net.connect(options, resetConnectionTimeout);
   }
+  var connTimeout = this.options.connectionTimeout;
+  if (connTimeout) {
+    debug && debug('setting connection timeout to ' + connTimeout);
+    this.socket.setTimeout(connTimeout, function () {
+      debug && debug('connection timeout');
+      this.destroy();
+      var e = new Error('connection timeout');
+      e.name = 'TimeoutError';
+      self.emit('error', e);
+    });
+  }
+
+  this.socket.setNoDelay(noDelay);
 
   // Proxy events.
   // Note that if we don't attach a 'data' event, no data will flow.
@@ -556,18 +644,39 @@ Connection.prototype._createSocket = function() {
   });
 
   // Proxy a few methods that we use / previously used.
-  var methods = ['end', 'destroy', 'write', 'pause', 'resume', 'setEncoding', 'ref', 'unref', 'address'];
+  var methods = ['destroy', 'write', 'pause', 'resume', 'setEncoding', 'ref', 'unref', 'address'];
   _.each(methods, function(method){
     self[method] = function(){
       self.socket[method].apply(self.socket, arguments);
     };
   });
+};
 
+Connection.prototype.end = function() {
+  if (this.socket) {
+    this.socket.end();
+  }
+
+  this.options.heartbeat = false;
+
+  if (this._inboundHeartbeatTimer !== null) {
+    clearTimeout(this._inboundHeartbeatTimer);
+    this._inboundHeartbeatTimer = null;
+  }
+
+  if (this._outboundHeartbeatTimer !== null) {
+    clearTimeout(this._outboundHeartbeatTimer);
+    this._outboundHeartbeatTimer = null;
+  }
 };
 
 Connection.prototype._getSSLOptions = function() {
   if (this.sslConnectionOptions) return this.sslConnectionOptions;
   this.sslConnectionOptions = {};
+  
+  if (this.options.ssl.pfxFile) {
+    this.sslConnectionOptions.pfx = fs.readFileSync(this.options.ssl.pfxFile);
+  }
   if (this.options.ssl.keyFile) {
     this.sslConnectionOptions.key = fs.readFileSync(this.options.ssl.keyFile);
   }
@@ -577,21 +686,24 @@ Connection.prototype._getSSLOptions = function() {
   if (this.options.ssl.caFile) {
     this.sslConnectionOptions.ca = fs.readFileSync(this.options.ssl.caFile);
   }
+  
   this.sslConnectionOptions.rejectUnauthorized = this.options.ssl.rejectUnauthorized;
+  this.sslConnectionOptions.passphrase = this.options.ssl.passphrase;
+  
   return this.sslConnectionOptions;
 };
 
 // Time to start the AMQP 7-way connection initialization handshake!
 // 1. The client sends the server a version string
 Connection.prototype._startHandshake = function() {
-  debug("Initiating handshake...");
+  debug && debug("Initiating handshake...");
   this.write("AMQP" + String.fromCharCode(0,0,9,1));
 };
 
 /*
  *
  * Parse helpers
- * 
+ *
  */
 
 Connection.prototype._sendBody = function (channel, body, properties) {
@@ -603,21 +715,25 @@ Connection.prototype._sendBody = function (channel, body, properties) {
   this._sendHeader(channel, buffer.length, properties);
 
   var pos = 0, len = buffer.length;
-  while (len > 0) {
-    var sz = len < maxFrameBuffer ? len : maxFrameBuffer;
+  var metaSize = 8; // headerBytes = 7, frameEndBytes = 1
+  var maxBodySize = maxFrameBuffer - metaSize;
 
-    var b = new Buffer(7 + sz + 1);
+  while (len > 0) {
+    var bodySize = len < maxBodySize ? len : maxBodySize;
+    var frameSize = bodySize + metaSize;
+
+    var b = new Buffer(frameSize);
     b.used = 0;
     b[b.used++] = 3; // constants.frameBody
     serializer.serializeInt(b, 2, channel);
-    serializer.serializeInt(b, 4, sz);
-    buffer.copy(b, b.used, pos, pos+sz);
-    b.used += sz;
+    serializer.serializeInt(b, 4, bodySize);
+    buffer.copy(b, b.used, pos, pos+bodySize);
+    b.used += bodySize;
     b[b.used++] = 206; // constants.frameEnd;
     this.write(b);
 
-    len -= sz;
-    pos += sz;
+    len -= bodySize;
+    pos += bodySize;
   }
   return;
 };
@@ -687,15 +803,16 @@ Connection.prototype._sendHeader = function(channel, size, properties) {
 
   b[b.used++] = 206; // constants.frameEnd;
 
-  var s = b.slice(0, b.used);
+  var s = new Buffer(b.used);
+  b.copy(s);
 
-  //debug('header sent: ' + JSON.stringify(s));
+  //debug && debug('header sent: ' + JSON.stringify(s));
 
   this.write(s);
 };
 
 Connection.prototype._sendMethod = function (channel, method, args) {
-  debug(channel + " < " + method.name + " " + JSON.stringify(args));
+  debug && debug(channel + " < " + method.name + " " + JSON.stringify(args));
   var b = this._sendBuffer;
   b.used = 0;
 
@@ -724,11 +841,30 @@ Connection.prototype._sendMethod = function (channel, method, args) {
 
   b[b.used++] = 206; // constants.frameEnd;
 
-  var c = b.slice(0, b.used);
+  var c = new Buffer(b.used);
+  b.copy(c);
 
-  debug("sending frame: " + c);
+  debug && debug("sending frame: " + c.toJSON());
 
   this.write(c);
-  
   this._outboundHeartbeatTimerReset();
+};
+
+// tries to find the next available id slot for a channel
+Connection.prototype.generateChannelId = function () {
+  // start from the last used slot id
+  var channelId = this.channelCounter;
+  while(true){
+    // use values in range of 1..65535
+    channelId = channelId % channelMax + 1;
+    if(!this.channels[channelId]){
+      break;
+    }
+    // after a full loop throw an Error
+    if(channelId == this.channelCounter){
+      throw new Error("No valid Channel Id values available");
+    }
+  }
+  this.channelCounter = channelId;
+  return this.channelCounter;
 };
