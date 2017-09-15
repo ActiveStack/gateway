@@ -23,15 +23,24 @@ SocketIOFactory.prototype.instance = function(){
     if(!this.sio){
         var httpServer = this.httpServerFactory.instance();
         if (this.ssl.useSsl) {
-            this.sio = io.listen(httpServer, {
+
+            var options = {
                 logger: this.logger.extendPrefix('socket.io'),
                 key: this.ssl.key,
                 cert: this.ssl.cert,
                 ca: this.ssl.ca
-            });
+            };
+            if (this.properties && this.properties.hasOwnProperty('frontend.flash_policy_port')) {
+                options['flash policy port'] = this.properties['frontend.flash_policy_port'];
+            }
+            this.sio = io.listen(httpServer, options);
         }
         else {
-            this.sio = io.listen(httpServer, {logger: this.logger.extendPrefix('socket.io')});
+            var options = {logger: this.logger.extendPrefix('socket.io')};
+            if (this.properties && this.properties.hasOwnProperty('frontend.flash_policy_port')) {
+                options['flash policy port'] = this.properties['frontend.flash_policy_port'];
+            }
+            this.sio = io.listen(httpServer, options);
         }
 
         var redisStore = this.redisStoreFactory.instance();
