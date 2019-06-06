@@ -110,6 +110,13 @@ Gateway.prototype.onSocketEnd = function (socket, isServerTerminated) {
             data: (!this.sockets || Object.keys(this.sockets).length <= 0) ? 0 : Object.keys(this.sockets).length
         });
     } catch (error) {}
+
+    setTimeout(function(socket, logger) {
+        try {
+            // Make sure the socket is disconnected/destroyed.
+            socket.end();
+        } catch(error) {}
+    },0, socket, this.logger);
 };
 
 Gateway.prototype.onSocketDisconnect = function (socket, reason, isServerTerminated) {
