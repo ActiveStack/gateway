@@ -1,19 +1,19 @@
 'use strict';
 
-var redis = require("redis");
+const redis = require("redis");
 
 function GatewayConsoleApplication(){}
 module.exports = GatewayConsoleApplication;
 
 GatewayConsoleApplication.prototype.run = function(configFile) {
     configFile = configFile || __dirname + '/../resources/env.default.properties';
-    var properties = require('node-properties-parser').readSync(configFile);
+    const properties = require('node-properties-parser').readSync(configFile);
 
-    var gatewayControlQueue = properties['gateway.redis.gatewaycontrolqueue'];
+    let gatewayControlQueue = properties['gateway.redis.gatewaycontrolqueue'];
     if (!gatewayControlQueue)
         gatewayControlQueue = 'gateway';
 
-    var client = redis.createClient(properties['gateway.redis.port'], properties['gateway.redis.host']);
+    const client = redis.createClient(properties['gateway.redis.port'], properties['gateway.redis.host']);
     if (properties['gateway.redis.password']) {
         client.auth(properties['gateway.redis.password'], function (error, result) {
             if (error)
@@ -29,10 +29,8 @@ GatewayConsoleApplication.prototype.run = function(configFile) {
 
     process.stdin.resume();
     process.stdin.setEncoding('utf8');
-    var util = require('util');
 
     process.stdin.on('data', function (text) {
-        //console.log('received data:', util.inspect(text));
         if (text === 'quit\n') {
             done();
         }

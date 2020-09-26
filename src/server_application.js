@@ -1,4 +1,4 @@
-var GatewayServer = require('./server'),
+const GatewayServer = require('./server'),
     AppContext = require('injecterooski').AppContext,
     PrefixedLogger = require('./logging/prefixed_logger'),
     HttpServerFactory = require('./factory/http_server_factory'),
@@ -14,9 +14,9 @@ var GatewayServer = require('./server'),
 function GatewayServerApplication(){}
 
 GatewayServerApplication.prototype.run = function(configFile){
-    var appContext = new AppContext();
+    const appContext = new AppContext();
 
-    var server = new GatewayServer();
+    const server = new GatewayServer();
 
     appContext.register([
         server,

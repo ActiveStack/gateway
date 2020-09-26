@@ -1,6 +1,6 @@
 'use strict';
 
-var cluster  = require('cluster'),
+const cluster  = require('cluster'),
     os       = require('os'),
     redis    = require('redis'),
     fs       = require('fs'),
@@ -25,7 +25,7 @@ GatewayServer.prototype.inject = function(prefixedLogger, properties, gatewayWor
 
 GatewayServer.prototype.start = function(){
 
-    var cpuCount = os.cpus().length;
+    const cpuCount = os.cpus().length;
     this.workerCount = this.properties['cluster.workerCount'] || cpuCount / 2 + 1;
 
     if(cluster.isMaster){
@@ -52,7 +52,7 @@ GatewayServer.prototype.isMaster = function(){
 GatewayServer.prototype.startMaster = function(){
     this.setupIPC();
 
-    for (var i = 0; i < this.workerCount; ++i) {
+    for (let i = 0; i < this.workerCount; ++i) {
         this.createWorkerProcess();
     }
 };
@@ -62,11 +62,11 @@ GatewayServer.prototype.startMaster = function(){
  */
 GatewayServer.prototype.setupIPC = function(){
     try {
-        var gatewayControlQueue = this.properties['gateway.redis.gatewaycontrolqueue'];
+        let gatewayControlQueue = this.properties['gateway.redis.gatewaycontrolqueue'];
         if (!gatewayControlQueue)
             gatewayControlQueue = 'gateway';
 
-        var client = redis.createClient(this.properties['gateway.redis.port'], this.properties['gateway.redis.host']);
+        const client = redis.createClient(this.properties['gateway.redis.port'], this.properties['gateway.redis.host']);
         if (this.properties['gateway.redis.password']) {
             client.auth(this.properties['gateway.redis.password'], function(error, result) {
                 if (error)
@@ -93,8 +93,8 @@ GatewayServer.prototype.setupIPC = function(){
  */
 GatewayServer.prototype.onIPCMessage = function (channel, message) {
     try {
-        var messageName = message.toLowerCase().trim();
-        var params = message.toLowerCase().trim().split(' ');
+        const messageName = message.toLowerCase().trim();
+        const params = message.toLowerCase().trim().split(' ');
 
         // TODO: Add workerCount message
         switch (messageName) {
@@ -129,7 +129,7 @@ GatewayServer.prototype.onIPCMessage = function (channel, message) {
 GatewayServer.prototype.onIPCShutdown = function(params){
     this.logger.info('Processing SHUTDOWN message');
     this.shuttingDown = true;
-    var stopCode;
+    let stopCode;
     if (params.length > 1) {
         stopCode = params[1];
     }
@@ -138,11 +138,11 @@ GatewayServer.prototype.onIPCShutdown = function(params){
         this.logger.info('\n************************ INVALID SHUTDOWN CODE RECEIVED!!! ************************\n');
         return;
     }
-    var stopType = 'immediate';
+    let stopType = 'immediate';
     if (params.length > 2) {
         stopType = params[2];
     }
-    var stopTimeout;
+    let stopTimeout;
     if (params.length > 3)
         stopTimeout = parseInt(params[3]);
     this.stopWorkerProcesses(stopType, stopTimeout);
@@ -154,11 +154,11 @@ GatewayServer.prototype.onIPCShutdown = function(params){
  */
 GatewayServer.prototype.onIPCRestart = function(params){
     this.logger.info('Processing RESTART message');
-    var restartType = 'immediate';
+    let restartType = 'immediate';
     if (params.length > 1) {
         restartType = params[1];
     }
-    var restartInterval;
+    let restartInterval;
     if (params.length > 2)
         restartInterval = parseInt(params[2]);
     this.restartWorkerProcesses(restartType, restartInterval);
@@ -179,7 +179,7 @@ GatewayServer.prototype.onIPCClientCount = function(){
 GatewayServer.prototype.onIPCClientMessageResendInterval = function(params){
     this.logger.info('Processing CLIENTMESSAGERESENDINTERVAL message');
 
-    var clientMessageResendInterval = this.properties['frontend.clientMessageResendInterval'];
+    let clientMessageResendInterval = this.properties['frontend.clientMessageResendInterval'];
     if (params.length > 1) {
         clientMessageResendInterval = params[1];
     }
@@ -192,7 +192,7 @@ GatewayServer.prototype.onIPCClientMessageResendInterval = function(params){
  */
 GatewayServer.prototype.onIPCLogLevel = function(params){
     this.logger.info('Processing LOGLEVEL message');
-    var logLevel = this.properties['frontend.logLevel'];
+    let logLevel = this.properties['frontend.logLevel'];
     if (params.length > 1) {
         logLevel = params[1];
     }
@@ -204,7 +204,7 @@ GatewayServer.prototype.startWorker = function(){
 };
 
 GatewayServer.prototype.restartWorkerProcesses = function(restartType, restartInterval) {
-    var oldWorkers = this.workers;
+    const oldWorkers = this.workers;
     this.workers = [];
     this.logger.info('Restarting processes - ' + restartType.toUpperCase());
 
@@ -212,13 +212,13 @@ GatewayServer.prototype.restartWorkerProcesses = function(restartType, restartIn
         if (!restartInterval)
             restartInterval = 500;
         this.logger.info('Restarting processes at ' + restartInterval + 'ms intervals');
-        for(var j=0; j<oldWorkers.length; j++) {
+        for(let j=0; j<oldWorkers.length; j++) {
             // Force it to stop. When the onEnd function runs it will restart it
             this.hardStopWorkerProcess(oldWorkers[j],j * restartInterval);
         }
     }
     else {
-        for(var j=0; j<oldWorkers.length; j++) {
+        for(let j=0; j<oldWorkers.length; j++) {
             this.logger.info('sending timeout ' + restartInterval);
             oldWorkers[j].send({cmd: 'restart', type: 'on_client_queue_empty', data: restartInterval});
         }
@@ -226,7 +226,7 @@ GatewayServer.prototype.restartWorkerProcesses = function(restartType, restartIn
 }
 
 GatewayServer.prototype.hardStopWorkerProcess = function(worker, delay){
-    var hardStop = function(){
+    const hardStop = function(){
         try {
             worker.disconnect();
             worker.destroy();
@@ -242,7 +242,7 @@ GatewayServer.prototype.hardStopWorkerProcess = function(worker, delay){
 };
 
 GatewayServer.prototype.stopAndRemoveWorkerProcess = function(worker, delay){
-    for(var i = 0; i < this.workers.length; i++) {
+    for(let i = 0; i < this.workers.length; i++) {
         if (this.workers[i] === worker) {
             this.workers.splice(i, 1);
             break;
@@ -252,7 +252,7 @@ GatewayServer.prototype.stopAndRemoveWorkerProcess = function(worker, delay){
 };
 
 GatewayServer.prototype.sendMessageToWorkers = function(message){
-    for(var j = 0; j < this.workers.length; j++) {
+    for(let j = 0; j < this.workers.length; j++) {
         try {
             if (this.workers[j]) {
                 this.workers[j].send(message);
@@ -267,7 +267,7 @@ GatewayServer.prototype.stopWorkerProcesses = function(stopType, stopTimeout) {
     this.logger.info('Stopping processes - ' + stopType.toUpperCase());
 
     if (stopType.toLowerCase() === 'immediate') {
-        for(var j = 0; j < this.workers.length; j++) {
+        for(let j = 0; j < this.workers.length; j++) {
             this.hardStopWorkerProcess(this.workers[j]);
         }
         process.exit();
@@ -297,8 +297,8 @@ GatewayServer.prototype.resetWorkerRestartDelay = function() {
 };
 
 GatewayServer.prototype.getNextWorkerRestartDelay = function() {
-    var failureCount = Math.min(this.consecutiveFailures++, this.properties['cluster.maxRestartBackoff']);
-    var factor = Math.random() * (Math.pow(2, failureCount) - 1);
+    const failureCount = Math.min(this.consecutiveFailures++, this.properties['cluster.maxRestartBackoff']);
+    const factor = Math.random() * (Math.pow(2, failureCount) - 1);
     return factor * this.properties['cluster.workerRestartDelay'];
 };
 
@@ -306,7 +306,7 @@ GatewayServer.prototype.onWorkerProcessOnline = function(worker) {
     this.logger.info('Worker online: ' + worker.process.pid);
     worker.lastHeartbeat = Date.now();
     worker.watchdog = setInterval(function() {
-        var time = Date.now();
+        const time = Date.now();
         if (worker.lastHeartbeat + this.properties['cluster.workerTimeout'] < time) {
             this.logger.info('Worker heartbeat stopped, destroying worker: ' + worker.process.pid);
 
@@ -322,9 +322,9 @@ GatewayServer.prototype.onWorkerProcessMessageHeartbeat = function(worker, messa
     }
 
     worker.lastHeartbeat = Date.now();
-    for (var type in message.memory) {
-        var limit = this.properties['cluster.memoryLimit.' + type];
-        var warning = this.properties['cluster.memoryWarning.' + type];
+    for (let type in message.memory) {
+        const limit = this.properties['cluster.memoryLimit.' + type];
+        const warning = this.properties['cluster.memoryWarning.' + type];
         if (limit && (message.memory[type] > limit * MEGABYTE)) {
             this.logger.info('Worker exceeded hard ' + type + ' memory limit (' +
                 message.memory[type] + '/' + limit * MEGABYTE + ')!');
@@ -393,7 +393,7 @@ GatewayServer.prototype.onWorkerProcessExit = function(worker, code, signal) {
         (signal || 'none') + ').  Starting replacement...');
     clearInterval(worker.watchdog);
 
-    for(var i = 0; i < this.workers.length; i++) {
+    for(let i = 0; i < this.workers.length; i++) {
         if (this.workers[i] === worker) {
             this.workers.splice(i, 1);
             break;
@@ -420,7 +420,7 @@ GatewayServer.prototype.createWorkerProcess = function(forceCreate) {
         }
     }
 
-    var worker = cluster.fork();
+    const worker = cluster.fork();
     worker.lastHeartbeat = null;
     worker.watchdog = null;
     worker.gotFirstHeartbeat = false;

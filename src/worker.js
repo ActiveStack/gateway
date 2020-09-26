@@ -22,11 +22,11 @@ GatewayWorker.prototype.isExiting = function(){
 };
 
 GatewayWorker.prototype.checkMemoryUsage = function () {
-    var memoryUsage = process.memoryUsage();
-    var megabyte = 1024 * 1024;
-    for (var type in memoryUsage) {
-        var limit = this.properties['cluster.memoryLimit.' + type];
-        var warning = this.properties['cluster.memoryWarning.' + type];
+    const memoryUsage = process.memoryUsage();
+    const megabyte = 1024 * 1024;
+    for (let type in memoryUsage) {
+        const limit = this.properties['cluster.memoryLimit.' + type];
+        const warning = this.properties['cluster.memoryWarning.' + type];
         if (limit && (memoryUsage[type] > limit * megabyte)) {
             this.logger.error('Worker exceeded hard ' + type + ' memory limit (' +
             memoryUsage[type] + '/' + limit * megabyte + ')!');
@@ -53,9 +53,9 @@ GatewayWorker.prototype.sendMessage = function(message) {
 
 
 GatewayWorker.prototype.onMessageStopOrRestart = function(msg){
-    var cmd = msg.cmd;
-    var type = msg.type;
-    var data = parseInt(msg.data);
+    const cmd = msg.cmd;
+    const type = msg.type;
+    const data = parseInt(msg.data);
     this.logger.info('server received '+msg.cmd+' message: ' + type);
     if (type.toLowerCase() === 'on_client_queue_empty') {
 
@@ -86,14 +86,14 @@ GatewayWorker.prototype.onMessageStopOrRestart = function(msg){
 
 GatewayWorker.prototype.onMessageLogLevel = function(msg){
     throw new Error('NOT IMPLEMENTED');
-    //var logLevel = msg.data;
+    //const logLevel = msg.data;
     //this.logger.info('Setting LogLevel to ' + logLevel);
     //logger.remove(winston.transports.Console);
     //logger.add(winston.transports.Console, {level: logLevel});
 };
 
 GatewayWorker.prototype.onMessageCMSI = function(msg){
-    var clientMessageResendInterval = msg.data;
+    const clientMessageResendInterval = msg.data;
     this.logger.info('Setting clientMessageResendInterval to ' + clientMessageResendInterval);
     this.properties['frontend.clientMessageResendInterval'] = clientMessageResendInterval;
 };
@@ -104,7 +104,7 @@ GatewayWorker.prototype.onMessageClientCount = function(msg){
 };
 
 GatewayWorker.prototype.onProcessMessage = function (msg) {
-    var command = msg.cmd.toLowerCase();
+    const command = msg.cmd.toLowerCase();
     switch(command){
         case 'restart':
             this.onMessageStopOrRestart(msg);
