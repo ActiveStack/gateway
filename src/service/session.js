@@ -1,9 +1,9 @@
 'use strict';
 
 // TODO: Implement rolling session secret.
-var MAX_SESSION_AGE = (new Date(0)).setUTCDate(7);  // 7 days
+const MAX_SESSION_AGE = (new Date(0)).setUTCDate(7);  // 7 days
 
-var crypto = require('crypto');
+const crypto = require('crypto');
 
 module.exports = Session;
 
@@ -56,7 +56,7 @@ Session.prototype.clone = function(copy) {
 };
 
 Session.prototype.signSession = function(encodedSession) {
-    var hmac = crypto.createHmac('sha512', this.properties['frontend.session_secret'] || 'twothreefour');
+    const hmac = crypto.createHmac('sha512', this.properties['frontend.session_secret'] || 'twothreefour');
     hmac.update(encodedSession);
 
     return hmac.digest('base64');
@@ -71,9 +71,9 @@ Session.prototype.signSession = function(encodedSession) {
  */
 Session.prototype.getSignedSession = function() {
     this._dirty = false;
-    var jsonCopy = JSON.stringify(this.clone({ savedAt: Date.now() }));
+    const jsonCopy = JSON.stringify(this.clone({ savedAt: Date.now() }));
 
-    var encodedSession = new Buffer(jsonCopy).toString('base64');
+    const encodedSession = new Buffer(jsonCopy).toString('base64');
     return (encodedSession + ';' + this.signSession(encodedSession));
 };
 
@@ -99,7 +99,7 @@ Session.prototype.isDirtyAsync = function(callback){
  */
 Session.prototype.load = function(signedSession) {
     if (signedSession && (typeof signedSession.split == 'function')) {
-        var parts = signedSession.split(';');
+        const parts = signedSession.split(';');
     } else {
         this.logger.warn('Dropping invalid session: ' + signedSession);
         return false;
@@ -110,15 +110,15 @@ Session.prototype.load = function(signedSession) {
         return false;
     }
 
-    var encodedSession = parts[0];
-    var signature = parts[1];
+    const encodedSession = parts[0];
+    const signature = parts[1];
 
     if (signature != this.signSession(encodedSession)) {
         this.logger.warn('Dropping (potentially) tampered session: ' + signedSession);
         return false;
     }
 
-    var copy = JSON.parse(new Buffer(encodedSession, 'base64').toString());
+    const copy = JSON.parse(new Buffer(encodedSession, 'base64').toString());
     if (copy.savedAt < Date.now() - MAX_SESSION_AGE) {
         this.logger.warn('Dropping expired session: ' + signedSession);
         return false;
@@ -133,7 +133,7 @@ Session.prototype.load = function(signedSession) {
     // Dirty ourselves so the client gets an update with a newer timestamp.
     this._dirty = true;
 
-    var leftovers = Object.keys(copy);
+    const leftovers = Object.keys(copy);
     if (leftovers.length > 0) {
         this.logger.warn('Dropping unexpected session keys ' +
         JSON.stringify(leftovers) + ': ' + signedSession);

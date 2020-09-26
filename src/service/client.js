@@ -1,8 +1,8 @@
 'use strict';
 
-var Session = require('./session');
-var sys = require('util');
-var EventEmitter = require('events').EventEmitter;
+const Session = require('./session');
+const sys = require('util');
+const EventEmitter = require('events').EventEmitter;
 
 module.exports = GatewayClient;
 
@@ -31,8 +31,9 @@ function GatewayClient(socket, exchange, rabbitmq, logger, properties, sessionFa
 
     this.session = sessionFactory.create(); // Client's session, which also defines client's session ID (reconnectId)
 
+    this.awaitingResponseAcksCount = {}; // Holds counts for client message ACK's.
     this.awaitingResponseAcks = {}; // Holds callback functions for client message ACK's.
-    this.awaitingResponseAcksInterval = {}; // Message ACK Intervals for client message re-sends.
+    this.awaitingResponseAcksTimeout = {}; // Message ACK Timeouts for client message re-sends.
     this.clientQueue = null;    // Client RabbitMQ Queue
     this.disposed = false;
 
@@ -45,25 +46,26 @@ function GatewayClient(socket, exchange, rabbitmq, logger, properties, sessionFa
 GatewayClient.prototype.dispose = function() {
     if(this.disposed) return;
     this.disposed = true;
-    // Clear Awaiting Response Acks Intervals
-    if (this.awaitingResponseAcksInterval) {
-        for(var key in this.awaitingResponseAcksInterval) {
-            if (this.awaitingResponseAcksInterval.hasOwnProperty(key)) {
-                var theInterval = this.awaitingResponseAcksInterval[key];
-                this.logger.verbose('Clearing interval: ', theInterval);
+    // Clear Awaiting Response Acks Timeouts
+    if (this.awaitingResponseAcksTimeout) {
+        for(const key in this.awaitingResponseAcksTimeout) {
+            if (this.awaitingResponseAcksTimeout.hasOwnProperty(key)) {
+                const theTimeout = this.awaitingResponseAcksTimeout[key];
+                this.logger.verbose('Clearing timeout: ', theTimeout);
                 try {
-                    clearInterval(theInterval);
+                    clearTimeout(theTimeout);
                 } catch(error) { /* Do nothing on failure here */ }
             }
         }
-        this.awaitingResponseAcksInterval = {};
+        this.awaitingResponseAcksTimeout = {};
     }
 
     // Clear Awaiting Response Acks
+    this.awaitingResponseAcksCount = {};
     this.awaitingResponseAcks = {};
 
     // This sockect is completely closed, need to delete queue.
-    var disconnectMessage = this.session.populateMessage({
+    const disconnectMessage = this.session.populateMessage({
         cn: 'com.percero.agents.sync.vo.DisconnectRequest'
     });
     if (disconnectMessage.existingClientId) {
@@ -106,7 +108,7 @@ GatewayClient.prototype.init = function() {
     /**
      * SpecialMessageHandles - When the client receives a "special" message from the client, this defines how to process/handle
      *    that message.
-     *    - ack            Look for the corresponding ACK and acknowledge the message. Clear and remove any interval associated with the message.
+     *    - ack            Look for the corresponding ACK and acknowledge the message. Clear and remove any timeout associated with the message.
      *    - connect        Register new Auth agent and response queue (RabbitMQ Queue) for the client
      *    - hibernate        NOOP
      *    - reconnect    Attempt to initialize self using previous client settings, but with new client ID.
@@ -124,14 +126,14 @@ GatewayClient.prototype.init = function() {
 };
 
 GatewayClient.prototype.onHibernate = function(){
-    var hibernateMessage = this.session.populateMessage({
+    const hibernateMessage = this.session.populateMessage({
         cn: 'com.percero.agents.sync.vo.HibernateRequest'
     });
     this.sendToAgent('hibernate', hibernateMessage);
 }
 
 GatewayClient.prototype.onLogout = function(){
-    var disconnectAuthMessage = this.session.populateMessage({
+    const disconnectAuthMessage = this.session.populateMessage({
         cn: 'com.percero.agents.auth.vo.DisconnectRequest'
     });
     this.sendToAgent('disconnectAuth', disconnectAuthMessage);
@@ -139,7 +141,7 @@ GatewayClient.prototype.onLogout = function(){
 };
 
 GatewayClient.prototype.onAck = function(message) {
-    var ack = this.awaitingResponseAcks[message.correspondingMessageId];
+    const ack = this.awaitingResponseAcks[message.correspondingMessageId];
     if (!ack) {
         // We typically get here when:
         //  We re-sent the message because the client did not ACK in time, but in the meantime the client DID ACK and thus the re-send turned out to be superfluous.
@@ -150,15 +152,16 @@ GatewayClient.prototype.onAck = function(message) {
         delete this.awaitingResponseAcks[message.correspondingMessageId];
     }
 
-    var theInterval = this.awaitingResponseAcksInterval[message.correspondingMessageId];
-    if (theInterval) {
+    delete this.awaitingResponseAcksCount[message.correspondingMessageId];
+    const theTimeout = this.awaitingResponseAcksTimeout[message.correspondingMessageId];
+    if (theTimeout) {
         try {
-            clearInterval(theInterval);
+            clearTimeout(theTimeout);
         } catch(error) {
-            // If clearing the interval fails for whatever reason, we really don't care and want to move on.
+            // If clearing the timeout fails for whatever reason, we really don't care and want to move on.
         }
     }
-    delete this.awaitingResponseAcksInterval[message.correspondingMessageId];
+    delete this.awaitingResponseAcksTimeout[message.correspondingMessageId];
 };
 
 GatewayClient.prototype.onConnect = function() {
@@ -188,14 +191,14 @@ GatewayClient.prototype.onReconnect = function(message) {
 
     // The reconnectId is an encoded string that should contain all required details to re-establish the
     //  session, including the previous ClientID, which we save and then swap out for the new/current ClientID
-    var newClientId = this.session.clientId;
+    const newClientId = this.session.clientId;
     this.session.load(message.reconnectId); // Decrypts the reconnectId
     if (!this.session.existingClientIds) {
         this.session.existingClientIds = [];
     }
 
     // Setup the existing/previous client id(s)
-    var oldClientId = this.session.clientId;
+    const oldClientId = this.session.clientId;
     if (!oldClientId) {
         logger.error("No previous ClientID on reconnect");
     }
@@ -207,7 +210,7 @@ GatewayClient.prototype.onReconnect = function(message) {
     this.onConnect(message);
 
     if (this.session.isLoggedIn() && this.session.existingClientId && this.session.existingClientId !== this.session.clientId) {
-        var reconnectMessage = this.session.populateMessage({
+        const reconnectMessage = this.session.populateMessage({
             cn: 'com.percero.agents.sync.vo.ReconnectRequest',
             existingClientId: this.session.existingClientId,
             existingClientIds: this.session.existingClientIds
@@ -230,7 +233,7 @@ GatewayClient.prototype.onReconnect = function(message) {
 GatewayClient.prototype.routeSpecialMessage = function(type, message) {
     if (this.specialMessageHandlers[type]) {
         this.logger.verbose('Handling special message: ' + type + ' / ' + message);
-        var handler = this.specialMessageHandlers[type];
+        const handler = this.specialMessageHandlers[type];
         this[handler](message);
         this.sendSession();
     }
@@ -247,7 +250,7 @@ GatewayClient.prototype.sendSession = function() {
     this.session.isDirtyAsync(function(isDirty){
         if(isDirty){
             this.logger.verbose('Sending session to client.');
-            var signedSession = this.session.getSignedSession();
+            const signedSession = this.session.getSignedSession();
             this.sendToClient('gatewayConnectAck', signedSession);
         }
     }.bind(this));
@@ -258,8 +261,8 @@ GatewayClient.prototype.sendSession = function() {
  * @param response
  */
 GatewayClient.prototype.processResponse = function(response){
-    var regex = /^.*\.([^.]*)$/;
-    var relativeName = response.cn.replace(regex, '$1');
+    const regex = /^.*\.([^.]*)$/;
+    const relativeName = response.cn.replace(regex, '$1');
 
     switch(relativeName){
         case 'UserToken':
@@ -354,7 +357,7 @@ GatewayClient.prototype.afterLogin = function(){
     if(this.session.isLoggedIn()){
         // If the session has an existingClientId that is DIFFERENT from its clientId, then issue a ReconnectMessage instead.
         if (this.session.existingClientId && this.session.existingClientId !== this.session.clientId) {
-            var reconnectMessage = this.session.populateMessage({
+            const reconnectMessage = this.session.populateMessage({
                 cn: 'com.percero.agents.sync.vo.ReconnectRequest',
                 existingClientId: this.session.existingClientId,
                 existingClientIds: this.session.existingClientIds
@@ -364,7 +367,7 @@ GatewayClient.prototype.afterLogin = function(){
             this.sendToAgent('reconnect', reconnectMessage);
         }
         else {
-            var connectMessage = this.session.populateMessage({
+            const connectMessage = this.session.populateMessage({
                 cn: 'com.percero.agents.sync.vo.ConnectRequest'
             });
             this.logger.verbose('Connect Message for session client ' + this.session.clientId
@@ -424,7 +427,7 @@ GatewayClient.prototype.onClientQueueMessage = function(response, headers, info,
     this.sendSession(); // Send the updated session to the client.
 
     if (response.correspondingMessageId) {
-        this.setupResendInterval(response, receipt);
+        this.setupResendTimeout(response, receipt);
     } else {
         receipt.acknowledge();
     }
@@ -433,41 +436,56 @@ GatewayClient.prototype.onClientQueueMessage = function(response, headers, info,
 };
 
 /**
- * Setup an interval to resend the message, at some interval until the client acks
+ * Setup an timeout to resend the message, at some timeout until the client acks
  * @param theResponse
  * @param receipt
  */
-GatewayClient.prototype.setupResendInterval = function(theResponse, receipt) {
+GatewayClient.prototype.setupResendTimeout = function(theResponse, receipt) {
     // Setup callback function to be used when the 'onAck' function is called for this message
     this.awaitingResponseAcks[theResponse.correspondingMessageId] = function() {
         receipt.acknowledge();
     };
 
-    this.awaitingResponseAcksInterval[theResponse.correspondingMessageId] =
-        setInterval(this.resend.bind(this, theResponse),
-            (this.properties['frontend.clientMessageResendInterval'] || 7500));
+    this.awaitingResponseAcksCount[theResponse.correspondingMessageId] = 1;
+
+    // console.log('Setting Ack Timeout: ' + (this.properties['frontend.clientMessageResendInterval'] || this.properties['frontend.clientMessageResendTimeout'] || 7500));
+    this.awaitingResponseAcksTimeout[theResponse.correspondingMessageId] =
+        setTimeout(this.resend.bind(this, theResponse),
+            (this.properties['frontend.clientMessageResendInterval'] || this.properties['frontend.clientMessageResendTimeout'] || 7500));
 };
 
 /**
- * Callback function to the interval setup in setupResendInterval. Tries to resend the
+ * Callback function to the timeout setup in setupResendTimeout. Tries to resend the
  * message.
  *
  * @param theResponse
  */
 GatewayClient.prototype.resend = function(theResponse) {
-    var ack = this.awaitingResponseAcks[theResponse.correspondingMessageId];
+    const ack = this.awaitingResponseAcks[theResponse.correspondingMessageId];
     if (ack) {
-        this.logger.warn('Unacknowledged message being sent again: ', theResponse.correspondingMessageId);
-        this.sendToClient('push', theResponse);
-    }
-    else {
-        var theInterval = this.awaitingResponseAcksInterval[theResponse.correspondingMessageId];
-        if (theInterval) {
-            this.logger.verbose('Message acknowledged, clearing timer.');
-            clearInterval(theInterval);
+        this.awaitingResponseAcksCount[theResponse.correspondingMessageId]++;
+        const ackCount = this.awaitingResponseAcksCount[theResponse.correspondingMessageId];
+
+        if (ackCount <= this.properties['frontend.clientMessageResendAttempts'] || 7) {
+            this.logger.warn('Unacknowledged message being sent again: ', theResponse.correspondingMessageId);
+            this.sendToClient('push', theResponse);
+            console.log('Setting Ack Timeout: ' + ((this.properties['frontend.clientMessageResendInterval'] || this.properties['frontend.clientMessageResendTimeout'] || 7500) * Math.pow((this.properties['frontend.clientMessageResendBackoff'] || 1.5), ackCount)));
+            this.awaitingResponseAcksTimeout[theResponse.correspondingMessageId] = 
+                setTimeout(this.resend.bind(this, theResponse),
+                    ((this.properties['frontend.clientMessageResendInterval'] || this.properties['frontend.clientMessageResendTimeout'] || 7500) * Math.pow((this.properties['frontend.clientMessageResendBackoff'] || 1.5), ackCount)));
+            return;
         }
-        delete this.awaitingResponseAcksInterval[theResponse.correspondingMessageId];
     }
+
+    delete this.awaitingResponseAcksCount[theResponse.correspondingMessageId];
+    delete this.awaitingResponseAcks[theResponse.correspondingMessageId];
+
+    const theTimeout = this.awaitingResponseAcksTimeout[theResponse.correspondingMessageId];
+    if (theTimeout) {
+        this.logger.verbose('Message acknowledged, clearing timeout.');
+        clearTimeout(theTimeout);
+    }
+    delete this.awaitingResponseAcksTimeout[theResponse.correspondingMessageId];
 }
 
 /**
@@ -475,7 +493,7 @@ GatewayClient.prototype.resend = function(theResponse) {
  * @param queue
  */
 GatewayClient.prototype.onClientQueueCreation = function(queue) {
-    var options = { ack: true, prefetchCount: 10 };
+    const options = { ack: true, prefetchCount: 10 };
 
     // Setup subscription to the new queue.
     queue.subscribe(options, this.onClientQueueMessage.bind(this));

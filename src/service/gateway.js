@@ -1,8 +1,7 @@
 'use strict';
 
-var io = require('socket.io');
-var Client = require('./client');
-var RedisStore = require('socket.io/lib/stores/redis');
+const io = require('socket.io');
+const Client = require('./client');
 
 module.exports = Gateway;
 
@@ -73,8 +72,8 @@ Gateway.prototype.initRabbitMQ = function() {
 
 Gateway.prototype.onRabbitReady = function () {
     this.logger.debug("RabbitMQ connection ready");
-    var durable = this.properties['gateway.rabbitmq.durable'] == 'true';
-    var options = {autoDelete: false, durable: durable, confirm: true};
+    const durable = this.properties['gateway.rabbitmq.durable'] == 'true';
+    const options = {autoDelete: false, durable: durable, confirm: true};
     this.exchange = this.rabbitmq.exchange('', options);
 
     this.exchange.on('error', this.gatewayWorker.createErrorHandler('RabbitMQ Exchange'));
@@ -86,7 +85,7 @@ Gateway.prototype.onRabbitReady = function () {
 }
 
 Gateway.prototype.onSocketEnd = function (socket, isServerTerminated) {
-    var client = this.clients[socket.id];
+    const client = this.clients[socket.id];
     if (client) {
         client.isServerTerminated = isServerTerminated;
     }
@@ -110,6 +109,13 @@ Gateway.prototype.onSocketEnd = function (socket, isServerTerminated) {
             data: (!this.sockets || Object.keys(this.sockets).length <= 0) ? 0 : Object.keys(this.sockets).length
         });
     } catch (error) {}
+
+    setTimeout(function(socket, logger) {
+        try {
+            // Make sure the socket is disconnected/destroyed.
+            socket.end();
+        } catch(error) {}
+    },0, socket, this.logger);
 };
 
 Gateway.prototype.onSocketDisconnect = function (socket, reason, isServerTerminated) {
@@ -144,7 +150,7 @@ Gateway.prototype.onSocketConnection = function (socket) {
     socket.on('disconnect', this.onSocketDisconnect.bind(this, socket));
     socket.on('logout', this.onSocketLogout.bind(this, socket));
 
-    var newClient = new Client(socket, this.exchange, this.rabbitmq, this.logger, this.properties, this.sessionFactory);
+    const newClient = new Client(socket, this.exchange, this.rabbitmq, this.logger, this.properties, this.sessionFactory);
     this.clients[socket.id] = newClient;
 
     newClient.on('dispose', this.onClientDispose.bind(this, socket));
@@ -152,7 +158,7 @@ Gateway.prototype.onSocketConnection = function (socket) {
 
 
 Gateway.prototype.handleError = function(error, source) {
-    var catchAndWarn = this.gatewayWorker.catchAndWarn;
+    const catchAndWarn = this.gatewayWorker.catchAndWarn;
 
     catchAndWarn('RabbitMQ', function() { this.rabbitmq.end();}.bind(this));
 
@@ -185,7 +191,7 @@ Gateway.prototype.onShutdown = function(shutdownType) {
 
     // RedisClient resists proper error handling :-(
 Gateway.prototype.attachRedisErrorHandlers = function(type, redis) {
-    var handler = this.gatewayWorker.createErrorHandler('Redis Store ' + type);
+    const handler = this.gatewayWorker.createErrorHandler('Redis Store ' + type);
     redis.on('error', handler);
 
     // If the server shuts down we get an "end" instead of an error.
