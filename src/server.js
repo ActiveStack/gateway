@@ -1,6 +1,6 @@
 'use strict';
 
-const cluster  = require('cluster'),
+var cluster  = require('cluster'),
     os       = require('os'),
     redis    = require('redis'),
     fs       = require('fs'),
