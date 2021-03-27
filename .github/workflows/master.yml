@@ -17,18 +17,15 @@ jobs:
       ECR_REPO: 657039004102.dkr.ecr.us-west-2.amazonaws.com/gateway
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      GITHUB_TOKEN_ACTION: ${{ secrets.GH_ACTION_TOKEN }}
 
     steps: 
     - name: Checkout code
       uses: actions/checkout@v2
-      with:
-        token: ${{ env.GITHUB_TOKEN_ACTION }}
     - name:  'Automated Version Bump'
       uses:  'phips28/gh-action-bump-version@master'
       id: version-bump
       env:
-        GITHUB_TOKEN: ${{ env.GITHUB_TOKEN_ACTION }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   
     - name: Build-Push
       uses: ./.github/actions/build-push
