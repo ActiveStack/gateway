@@ -22,7 +22,7 @@ outputs:
     description: "Docker image URL"
     value: ${{ steps.output.outputs.docker-image }}
 runs:
-  using: "composite"
+  using: "composite" 
   steps:
     - name: Get Version
       run: echo "::set-output name=version::$(${{github.action_path}}/get_version.sh ${{ inputs.version }})"
