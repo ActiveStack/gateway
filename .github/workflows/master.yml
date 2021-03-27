@@ -1,0 +1,62 @@
+name: Build-Test-Push
+on:
+  push: 
+    branches: 
+    - master
+    paths-ignore:
+    - 'package.json'
+    - 'package-lock.json'
+    - 'CHANGELOG.md'
+
+jobs:
+  build:
+    name: 'Bump Version, Build, Test, Push'
+    runs-on: ubuntu-latest
+
+    env:
+      ECR_REPO: 657039004102.dkr.ecr.us-west-2.amazonaws.com/gateway
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      GITHUB_TOKEN_ACTION: ${{ secrets.GH_ACTION_TOKEN }}
+
+    steps: 
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        token: ${{ env.GITHUB_TOKEN_ACTION }}
+    - name:  'Automated Version Bump'
+      uses:  'phips28/gh-action-bump-version@master'
+      id: version-bump
+      env:
+        GITHUB_TOKEN: ${{ env.GITHUB_TOKEN_ACTION }}
+  
+    - name: Build-Push
+      uses: ./.github/actions/build-push
+      with:
+        ecr-repo: $ECR_REPO
+        aws-access-key-id: $AWS_ACCESS_KEY_ID
+        aws-secret-access-key: $AWS_SECRET_ACCESS_KEY
+        version: ${{ steps.version-bump.outputs.newTag }}
+
+    # - name: Setup Terraform
+    #   uses: hashicorp/setup-terraform@v1
+    #   with:
+    #     cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+    # # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+    # - name: Terraform Init
+    #   run: terraform init
+
+    # # Checks that all Terraform configuration files adhere to a canonical format
+    # - name: Terraform Format
+    #   run: terraform fmt -check
+
+    # # Generates an execution plan for Terraform
+    # - name: Terraform Plan
+    #   run: terraform plan
+
+    #   # On push to $default-branch, build or change infrastructure according to Terraform configuration files
+    #   # Note: It is recommended to set up a required "strict" status check in your repository for "Terraform Cloud". See the documentation on "strict" required status checks for more information: https://help.github.com/en/github/administering-a-repository/types-of-required-status-checks
+    # - name: Terraform Apply
+    #   if: github.ref == 'refs/heads/$default-branch' && github.event_name == 'push'
+    #   run: terraform apply -auto-approve

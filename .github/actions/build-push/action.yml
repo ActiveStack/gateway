@@ -1,0 +1,49 @@
+name: 'Build-Push'
+description: 'Build and Push'
+inputs:
+  ecr-repo:  
+    description: 'ECR repo to push to'
+    required: true
+    default: 'ERROR'
+  aws-access-key-id:  
+    description: 'AWS Access Key ID for logging into ECR'
+    required: true
+    default: 'ERROR'
+  aws-secret-access-key:  
+    description: 'AWS Secret Access Key for logging into ECR'
+    required: true
+    default: 'ERROR'
+  version:
+    description: 'Tag to use when tagging the docker image instead of {branch}-{commit}'
+    required: false
+    default: 'none'
+outputs:
+  docker-image:
+    description: "Docker image URL"
+    value: ${{ steps.output.outputs.docker-image }}
+runs:
+  using: "composite"
+  steps:
+    - name: Get Version
+      run: echo "::set-output name=version::$(${{github.action_path}}/get_version.sh ${{ inputs.version }})"
+      id: get_version
+      shell: bash
+
+    - name: Build app image
+      run: docker build --build-arg VERSION_TAG=$image --target app -t $ECR_REPO:${{steps.get_version.outputs.version}} .
+      shell: bash
+
+    - name: Login to ECR
+      run: aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin ${{ inputs.ecr-repo}}
+      shell: bash
+
+    - name: Push to ECR
+      run: docker push $ECR_REPO:${{steps.get_version.outputs.version}}
+      shell: bash
+
+    - id: output
+      run: echo "::set-output name=docker-image::$(echo ${{ inputs.ecr-repo }}:${{ steps.get_version.outputs.version }})"
+      shell: bash
+
+    - run: echo "New Image pushed to ${{ steps.output.outputs.docker-image }}"
+      shell: bash
