@@ -90,7 +90,7 @@ resource "aws_alb_target_group" "app" {
     matcher           = "200-299"
     # timeout           = "3" # leave as default
     path                = "/" # leave as default
-    unhealthy_threshold = "3"                                 # default
+    unhealthy_threshold = "3" # default
   }
 }
 
