@@ -1,4 +1,4 @@
-name: Build-Test-Push
+name: Build-Push
 on:
   push: 
     branches: 
@@ -10,13 +10,16 @@ on:
 
 jobs:
   build:
-    name: 'Bump Version, Build, Test, Push'
+    name: 'Bump Version, Build, Push'
     runs-on: ubuntu-latest
 
     env:
-      ECR_REPO: 657039004102.dkr.ecr.us-west-2.amazonaws.com/gateway
+      ECR_REPO: 657039004102.dkr.ecr.us-west-2.amazonaws.com/activestack-gateway
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    outputs:
+      docker-image: ${{ steps.btp.outputs.docker-image}}
 
     steps: 
     - name: Checkout code

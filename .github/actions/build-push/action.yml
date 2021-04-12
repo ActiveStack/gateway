@@ -4,15 +4,12 @@ inputs:
   ecr-repo:  
     description: 'ECR repo to push to'
     required: true
-    default: 'ERROR'
   aws-access-key-id:  
     description: 'AWS Access Key ID for logging into ECR'
     required: true
-    default: 'ERROR'
   aws-secret-access-key:  
     description: 'AWS Secret Access Key for logging into ECR'
     required: true
-    default: 'ERROR'
   version:
     description: 'Tag to use when tagging the docker image instead of {branch}-{commit}'
     required: false
