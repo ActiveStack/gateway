@@ -1,18 +1,6 @@
-FROM node:0.10.48 as base
-WORKDIR /app
-COPY *json /app/
-ENTRYPOINT ['npm'. 'start']
+FROM node:0.10.48 as app
+RUN npm i -g activestack-gateway
+WORKDIR /opt
 
-FROM base as test
-RUN npm install
-COPY src /app/src/
-COPY test /app/test/
-USER node
-ENTRYPOINT ["npm", "test"]
-
-FROM base as app
-RUN npm install --production
-USER node
-ENTRYPOINT ["npm", "start", "s", "./docker/env.properties"]
-ARG VERSION_TAG=undefined
-LABEL VERSION_TAG=$VERSION_TAG
+COPY ./docker ./docker
+CMD ./docker/boot.sh
