@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    name: 'Bump Version, Build, Push'
+    name: 'Bump Version, Build, Push' 
     runs-on: ubuntu-latest
 
     env:
