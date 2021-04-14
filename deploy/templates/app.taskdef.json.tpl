@@ -47,6 +47,14 @@
         "value": "${rabbit_host}"
       },
       { 
+        "name": "RABBIT_PORT",
+        "value": "${rabbit_port}"
+      },
+      { 
+        "name": "RABBIT_USE_SSL",
+        "value": "true"
+      },
+      { 
         "name": "REDIS_HOST",
         "value": "${redis_host}"
       }

@@ -31,9 +31,10 @@ gateway.redis.max_attempts=1
 gateway.redis.offline_queue=false
 
 gateway.rabbitmq.host=$RABBIT_HOST
-gateway.rabbitmq.port=5672
+gateway.rabbitmq.port=$RABBIT_PORT
 gateway.rabbitmq.login=$RABBIT_USER
 gateway.rabbitmq.password=$RABBIT_PASS
+gateway.rabbitmq.useSSL=$RABBIT_USE_SSL
 gateway.rabbitmq.durable=true
 gateway.rabbitmq.concurrency=5
 
