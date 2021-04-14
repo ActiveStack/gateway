@@ -89,7 +89,7 @@ resource "aws_alb_target_group" "app" {
     protocol          = "HTTP"
     matcher           = "200-299"
     # timeout           = "3" # leave as default
-    path                = "/" # leave as default
+    path                = "/socket.io/1" # leave as default
     unhealthy_threshold = "3" # default
   }
 }
