@@ -12,7 +12,8 @@ data "template_file" "as-gateway_app" {
     fargate_memory = module.env.fargate_memory
     aws_region     = module.env.aws_region
     log_level      = module.env.log_level
-    rabbit_host    = module.env.rabbit_host
+    rabbit_host    = regex("amqps://(.*):.*", aws_mq_broker.main.instances.0.endpoints.0)[0]
+    rabbit_port    = regex("amqps://.*:(.*)", aws_mq_broker.main.instances.0.endpoints.0)[0]
     redis_host     = module.env.redis_host
     aws_account_id = var.aws_account_id
   }
@@ -85,4 +86,8 @@ data "aws_subnet_ids" "public" {
 data "aws_security_group" "accepter_rds" {
   vpc_id = module.env.old_vpc_id
   id     = module.env.db_security_group_id
+}
+
+data "aws_mq_broker" "main" {
+  broker_name = "rabbitmq-${module.env.name}"
 }
