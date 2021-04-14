@@ -1,6 +1,5 @@
 FROM node:0.10.48 as app
-RUN npm i -g activestack-gateway
 WORKDIR /opt
-
-COPY ./docker ./docker
+COPY . .
+RUN npm i
 CMD ./docker/boot.sh
