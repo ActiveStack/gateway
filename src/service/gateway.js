@@ -77,6 +77,10 @@ Gateway.prototype.onRabbitReady = function () {
     var options = {autoDelete: false, durable: durable, confirm: true};
     this.exchange = this.rabbitmq.exchange('', options);
 
+    // Create keep alive queue to periodically 
+    // this.clientQueue = this.rabbitmq.queue(this.session.clientId, this.exchange.options,
+    //   this.onClientQueueCreation.bind(this));
+
     this.exchange.on('error', this.gatewayWorker.createErrorHandler('RabbitMQ Exchange'));
 
     // Handles a new client socket connection.

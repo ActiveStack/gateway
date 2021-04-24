@@ -16,6 +16,7 @@ data "template_file" "as-gateway_app" {
     rabbit_port    = regex("amqps://.*:(.*)", data.aws_mq_broker.main.instances.0.endpoints.0)[0]
     redis_host     = module.env.redis_host
     aws_account_id = var.aws_account_id
+    worker_count   = module.env.worker_count
   }
 }
 

@@ -9,7 +9,7 @@ cluster.memoryLimit.rss=2048
 cluster.memoryLimit.heapUsed=500
 cluster.workerRestartDelay=50
 cluster.maxRestartBackoff=10
-cluster.workerCount=1
+cluster.workerCount=$WORKER_COUNT
 
 frontend.logLevel=info
 frontend.shutdownCode=pass123

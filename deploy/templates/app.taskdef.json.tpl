@@ -57,6 +57,10 @@
       { 
         "name": "REDIS_HOST",
         "value": "${redis_host}"
+      },
+      { 
+        "name": "WORKER_COUNT",
+        "value": "${worker_count}"
       }
     ]
   }
